@@ -46,11 +46,10 @@ class test:
         
         df = self._get_df_from_candle(candle)
         df.columns = self.all_columns
-
         
         # # as timestamp is returned in ms, let us convert this back to proper timestamps.
-        # df.dateTime = pd.to_datetime(df.dateTime, unit='ms').dt.strftime(self.date_time_format) # self._get_datetime_series(df.dateTime)
-        df.set_index('dateTime', inplace=True)
+        df.set_index('dateTime', drop=False, inplace=True)
+        df.dateTime = pd.to_datetime(df.dateTime, unit='ms').dt.strftime(self.date_time_format)
 
         # Get rid of columns we do not need
         df = df.drop(self.columns_to_drop, axis=1)
@@ -69,26 +68,38 @@ class test:
             self.locked = True
             # series = [self._get_datetime_single(msg['E']), msg['o'], msg['h'], msg['l'], msg['v']]
             # df = pd.Series(series)
-            df = pd.DataFrame([[msg['E'], msg['o'], msg['h'], msg['l'], msg['c'], msg['v']]])
-            df.columns = self.columns_to_keep
-            df.set_index('dateTime', inplace=True)
-            self.df = self.df.append(df) # , ignore_index=True)
+            last_timestamp = self.df.loc[self.df.index[-1], "dateTime"]
 
-            print("__________________________")
-            # self.df.tail(1).dateTime
-            print(self.df)
+            # ONLY UPDATE IF LANDS ON EXPECTED INTERVAL 
+            interval_milliseconds = helpers.interval_to_milliseconds(self.kline_interval)
+            if datetime.datetime.utcfromtimestamp(msg['E']/1000) > datetime.datetime.utcfromtimestamp((self.df.index[-1] + interval_milliseconds)/1000):
+                df = pd.DataFrame([[msg['E'], msg['o'], msg['h'], msg['l'], msg['c'], msg['v']]])
+                df.columns = self.columns_to_keep
+                df.set_index('dateTime', drop=False, inplace=True)
+                df.dateTime = self._get_datetime_single(df.dateTime)
+                self.df = self.df.append(df)
+
+                print(self.df)
+            else:
+                counted = datetime.datetime.utcfromtimestamp((self.df.index[-1] + interval_milliseconds)/1000).strftime(self.date_time_format)
+                print(f"not updated at datetime: {self._get_datetime_single(msg['E'])} > {counted} is FALSE")
+
+            # print("__________________________")
+            # print(self.df.loc[self.df.index[-1], "dateTime"])
+            # print(self.df.index[-1])
         finally:
             self.locked = False
 
 # test_net = True
-data_frame = test(symbol="BTCUSDT", historic_minutes=12, kline_interval="3m", test_net=True)
+# data_frame = test(symbol="BTCUSDT", historic_minutes=12, kline_interval="3m", test_net=True)
+data_frame = test(symbol="BTCUSDT", historic_minutes=12, kline_interval="1m", test_net=True)
 
 def main():
     twm = ThreadedWebsocketManager(testnet=data_frame.test_net)
     twm.daemon = True
     twm.start()
     twm.start_symbol_miniticker_socket(callback=data_frame.update_dataframe, symbol=data_frame.symbol)
-    twm.join(timeout=20.0)
+    twm.join(timeout=120.0)
 
 
 if __name__ == "__main__":
