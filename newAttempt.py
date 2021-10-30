@@ -55,7 +55,6 @@ class test:
         # Get rid of columns we do not need
         df = df.drop(self.columns_to_drop, axis=1)
 
-
         print(df)
         return df
 
