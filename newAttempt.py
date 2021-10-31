@@ -1,4 +1,3 @@
-from typing import final
 from binance import ThreadedWebsocketManager, helpers
 from Playground.bFinanceAPIFunctions import getClient
 import pandas as pd
