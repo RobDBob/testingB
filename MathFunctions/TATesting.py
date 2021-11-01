@@ -7,27 +7,27 @@ def stoch_test(stoch_df, buy=True):
     0: STOCHk_14_3_3    k - GREEN
     1: STOCHd_14_3_3    d - RED
     """
-    # K - GREEN
-    # D - RED
     if buy:
         low_treshold = 10
 
         sufficiently_low = stoch_df.iloc[-1][0] < low_treshold and stoch_df.iloc[-1][1] < low_treshold
-        green_above = stoch_df.iloc[-2][0] < stoch_df.iloc[-2][1]
-        green_below = stoch_df.iloc[-1][0] > stoch_df.iloc[-1][1]
+        # green_above = stoch_df.iloc[-2][0] < stoch_df.iloc[-2][1]
+        # green_below = stoch_df.iloc[-1][0] > stoch_df.iloc[-1][1]
+        red_below = stoch_df.iloc[-1][0] > stoch_df.iloc[-1][1]
 
-        print(f"stoch_test: BUY: sufficiently_low:{sufficiently_low}; green_below:{green_below}; green_above:{green_above}")
-        return sufficiently_low and green_above and green_below
+        print(f"stoch_test: BUY: sufficiently_low:{sufficiently_low}; red_below:{red_below}")
+        return sufficiently_low and red_below
 
     if not buy: # aka sell
         high_treshold = 90
 
         sufficiently_high = stoch_df.iloc[-1][0] > high_treshold and stoch_df.iloc[-1][1] > high_treshold
-        green_below = stoch_df.iloc[-2][0] < stoch_df.iloc[-2][1]
-        green_above = stoch_df.iloc[-1][0] > stoch_df.iloc[-1][1]
+        # green_below = stoch_df.iloc[-2][0] < stoch_df.iloc[-2][1]
+        # green_above = stoch_df.iloc[-1][0] > stoch_df.iloc[-1][1]
+        green_below = stoch_df.iloc[-1][0] < stoch_df.iloc[-1][1]
 
-        print(f"stoch_test: SELL: sufficiently_high:{sufficiently_high}; green_below:{green_below}; green_above:{green_above}")
-        return sufficiently_high and green_below and green_above
+        print(f"stoch_test: SELL: sufficiently_high:{sufficiently_high}; green_below:{green_below}")
+        return sufficiently_high and green_below
 
 def bb_test(df, buy=True):
     bb_df = ta.bbands(df["close"], length=18, std=2)

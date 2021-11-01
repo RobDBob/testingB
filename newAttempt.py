@@ -1,60 +1,36 @@
 from binance import ThreadedWebsocketManager, helpers
+from binance.enums import KLINE_INTERVAL_1MINUTE
 from Playground.bFinanceAPIFunctions import getClient
 import pandas as pd
 import datetime, time
 import pandas_ta as ta
-from main1dbstuff import saveToFile, readFromFile
 from MathFunctions import TATesting
+from Helpers import PandaFunctions
+import logging
 
-class test:
-    all_columns = ['dateTime', 'open', 'high', 'low', 'close', 'volume', 'closeTime', 'quoteAssetVolume', 'numberOfTrades', 'takerBuyBaseVol', 'takerBuyQuoteVol', 'ignore']
-    columns_to_drop = ['closeTime', 'quoteAssetVolume', 'numberOfTrades', 'takerBuyBaseVol','takerBuyQuoteVol', 'ignore']
-    columns_to_keep = ['dateTime', 'open', 'high', 'low', 'close', 'volume']
-    date_time_format = '%Y-%m-%d %H:%M:%S'
+date_time_format = '%Y-%m-%d %H:%M:%S'
+all_columns = ['dateTime', 'open', 'high', 'low', 'close', 'volume', 'closeTime', 'quoteAssetVolume', 'numberOfTrades', 'takerBuyBaseVol', 'takerBuyQuoteVol', 'ignore']
+columns_to_drop = ['closeTime', 'quoteAssetVolume', 'numberOfTrades', 'takerBuyBaseVol','takerBuyQuoteVol', 'ignore']
+columns_to_keep = ['dateTime', 'open', 'high', 'low', 'close', 'volume']
 
-    def __init__(self, symbol, historic_minutes, kline_interval, test_net):
+class DataUpdater:
+    def __init__(self, symbol, kline_interval, historic_data=None):
         self.symbol = symbol
         self.kline_interval = kline_interval
-        self.test_net = test_net
 
-        self.df = self.getHistoricalData(historic_minutes)
-        print(self.df)
+        if historic_data is None:
+            self.df = pd.DataFrame()
+        else:
+            self.df = historic_data
 
-    def _rewrite_data_cleanup(self, json_data):
-        """
-        Save and read from json, clean up data
-        to investigate why this is needed
-        """
-        temp_file_name = "temp_json.json"
-        saveToFile(json_data, temp_file_name)
-        return pd.read_json(temp_file_name)
+        self.logger = logging.getLogger("test")
     
     def _get_datetime_series(self, date_time_stamps_ms):
         # print(f"---- type: {type(date_time_stamps_ms)}, value: {date_time_stamps_ms}")
-        return pd.to_datetime(date_time_stamps_ms, unit='ms').dt.strftime(self.date_time_format)
+        return pd.to_datetime(date_time_stamps_ms, unit='ms').dt.strftime(date_time_format)
 
     def _get_datetime_single(self, date_time_stamp_ms):
-        return datetime.datetime.utcfromtimestamp((int(date_time_stamp_ms)/1000)).strftime(self.date_time_format)
-
-    def getHistoricalData(self, howLongMinutes):
-        client = getClient(self.test_net)
-        # Calculate the timestamps for the binance api function
-        untilThisDate = datetime.datetime.utcnow()
-        sinceThisDate = untilThisDate - datetime.timedelta(minutes = howLongMinutes)
-        # Execute the query from binance - timestamps must be converted to strings !
-        candle = client.get_historical_klines(self.symbol, self.kline_interval, str(sinceThisDate), str(untilThisDate))
-        
-        df = self._rewrite_data_cleanup(candle)
-        df.columns = self.all_columns
-        
-        # # as timestamp is returned in ms, let us convert this back to proper timestamps.
-        df.set_index('dateTime', drop=False, inplace=True)
-        df.dateTime = pd.to_datetime(df.dateTime, unit='ms').dt.strftime(self.date_time_format)
-
-        # Get rid of columns we do not need
-        return df.drop(self.columns_to_drop, axis=1)
-
-    
+        return datetime.datetime.utcfromtimestamp((int(date_time_stamp_ms)/1000)).strftime(date_time_format)
 
     def do_stuff(self, msg):
         if (self.update_dataframe(msg)):
@@ -69,11 +45,7 @@ class test:
             buy.append(TATesting.bb_test(self.df, buy=True))
             sell.append(TATesting.bb_test(self.df, buy=False))
             
-            print(f"____________________________________________{self.df.loc[self.df.index[-1], 'dateTime']}:{self.df.loc[self.df.index[-1], 'close']}")
-            print(f"BUY: {all(buy)}")
-            print(f"SELL: {all(sell)}")
-            print("____________________________________________")
-
+            self.logger.info(f"{self.df.loc[self.df.index[-1], 'dateTime']}:{self.df.loc[self.df.index[-1], 'close']}. BUY: {all(buy)}, SELL: {all(sell)}")
 
             # self.df.to_json("output.json")
 
@@ -97,22 +69,55 @@ class test:
 
                 # print(f"Updated: TRUE: {df.loc[df.index[-1], 'dateTime']}")
         else:
-            counted = datetime.datetime.utcfromtimestamp((self.df.index[-1] + interval_milliseconds)/1000).strftime(self.date_time_format)
             # print(f"Updated: FALSE: {self._get_datetime_single(msg['E'])} > {counted}")
             print(f"ping________________________ {self._get_datetime_single(msg['E'])}")
             return False
 
 
-data_frame = test(symbol="BTCUSDT", historic_minutes=60, kline_interval="1m", test_net=True)
+def getHistoricalData(client, symbol, howLongMinutes, kline_interval):
+    
+    # Calculate the timestamps for the binance api function
+    untilThisDate = datetime.datetime.utcnow()
+    sinceThisDate = untilThisDate - datetime.timedelta(minutes = howLongMinutes)
+    # Execute the query from binance - timestamps must be converted to strings !
+    candles = client.get_historical_klines(symbol, kline_interval, str(sinceThisDate), str(untilThisDate))
+    
+    # df = rewrite_data_cleanup(candle)
+    df = pd.DataFrame().from_records(candles)
+    df.columns = all_columns
+    
+    # # as timestamp is returned in ms, let us convert this back to proper timestamps.
+    df.set_index('dateTime', drop=False, inplace=True)
+    df.dateTime = pd.to_datetime(df.dateTime, unit='ms').dt.strftime(date_time_format)
 
-def main():
-    twm = ThreadedWebsocketManager(testnet=data_frame.test_net)
+    # Get rid of columns we do not need
+    df = df.drop(columns_to_drop, axis=1)
+    df = PandaFunctions.convert_to_numeric(df, ['open', 'high', 'low', 'close', 'volume'])
+    
+    return df
+
+def main(data_updater, test_net):
+    twm = ThreadedWebsocketManager(testnet=test_net)
     twm.daemon = True
     twm.start()
     #twm.start_symbol_miniticker_socket(callback=data_frame.do_stuff, symbol=data_frame.symbol)
-    twm.start_kline_socket(callback=data_frame.do_stuff, symbol=data_frame.symbol)
-    twm.join(timeout=300.0)
+    twm.start_kline_socket(callback=data_updater.do_stuff, symbol=data_updater.symbol)
+    twm.join(timeout=60.0)
 
 
 if __name__ == "__main__":
-    main()
+    test_net = True
+    symbol = "BTCUSDT"
+    interval = KLINE_INTERVAL_1MINUTE
+    client = getClient(test_net=test_net)
+    historic_data = getHistoricalData(client, symbol, howLongMinutes=60, kline_interval=interval)
+    data_updater = DataUpdater(symbol=symbol, kline_interval=interval, historic_data=historic_data)
+
+    logger = logging.getLogger("test")
+    logger.setLevel(logging.DEBUG)
+    file_handler = logging.FileHandler('TATestRecords.log')
+    formatter    = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    main(data_updater, test_net)
