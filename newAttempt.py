@@ -7,10 +7,10 @@ import pandas_ta as ta
 from MathFunctions import TATesting
 from Helpers import PandaFunctions, const
 import logging
-
+from pprint import pprint
 
 class DataUpdater:
-    def __init__(self, symbol, kline_interval, historic_data=None):
+    def __init__(self, symbol, kline_interval, historic_data=None, client=None):
         self.symbol = symbol
         self.kline_interval = kline_interval
 
@@ -20,6 +20,7 @@ class DataUpdater:
             self.df = historic_data
 
         self.logger = logging.getLogger("test")
+        self.client = client
     
     def _get_datetime_series(self, date_time_stamps_ms):
         # print(f"---- type: {type(date_time_stamps_ms)}, value: {date_time_stamps_ms}")
@@ -43,7 +44,21 @@ class DataUpdater:
             
             self.logger.info(f"{self.df.loc[self.df.index[-1], 'dateTime']} - {self.df.loc[self.df.index[-1], 'close']}. BUY: {all(buy)}, SELL: {all(sell)}")
 
-            # self.df.to_json("output.json")
+            if all(buy):
+                self.buy()
+
+            if all(sell):
+                self.sell()
+
+    def buy(self):
+        order = self.client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=0.0001)
+        self.logger(pprint(order))
+        return
+
+    def sell(self):
+        order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=0.0001)
+        self.logger(pprint(order))
+        return
 
     def update_dataframe(self, msg):
         # ONLY UPDATE IF LANDS ON EXPECTED INTERVAL 
@@ -61,7 +76,6 @@ class DataUpdater:
 
             except Exception as e:
                 print(e)
-
                 
             finally:
                 self.locked = False
@@ -70,7 +84,7 @@ class DataUpdater:
                 # print(f"Updated: TRUE: {df.loc[df.index[-1], 'dateTime']}")
         else:
             # print(f"Updated: FALSE: {self._get_datetime_single(msg['E'])} > {counted}")
-            print(f"ping________________________ {self._get_datetime_single(msg['E'])}")
+            # print(f"ping________________________ {self._get_datetime_single(msg['E'])}")
             return False
 
 def main(data_updater, test_net):
@@ -88,7 +102,7 @@ if __name__ == "__main__":
     interval = KLINE_INTERVAL_1MINUTE
     client = getClient(test_net=test_net)
     historic_data = PandaFunctions.getHistoricalData(client, symbol, howLongMinutes=60, kline_interval=interval)
-    data_updater = DataUpdater(symbol=symbol, kline_interval=interval, historic_data=historic_data)
+    data_updater = DataUpdater(symbol=symbol, kline_interval=interval, historic_data=historic_data, client)
 
     logger = logging.getLogger("test")
     logger.setLevel(logging.DEBUG)
