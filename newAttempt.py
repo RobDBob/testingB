@@ -102,7 +102,7 @@ if __name__ == "__main__":
     interval = KLINE_INTERVAL_1MINUTE
     client = getClient(test_net=test_net)
     historic_data = PandaFunctions.getHistoricalData(client, symbol, howLongMinutes=60, kline_interval=interval)
-    data_updater = DataUpdater(symbol=symbol, kline_interval=interval, historic_data=historic_data, client)
+    data_updater = DataUpdater(symbol=symbol, kline_interval=interval, historic_data=historic_data, client=client)
 
     logger = logging.getLogger("test")
     logger.setLevel(logging.DEBUG)
