@@ -34,13 +34,7 @@ class TATester:
             self.logger.info(f"stoch_test: SELL: sufficiently_high:{sufficiently_high}; green_below:{green_below}")
             return sufficiently_high and green_below
 
-    def bb_test(self, df, buy=True):
-        bb_df = ta.bbands(df["close"], length=18, std=2)
-        # check where price touches and trend
-        # iloc[-1, ] 
-        # column indexes: 0:BBLow, 1:BBMedian, 2:BBUpper, 3:BBBandwidth, 4:BBPercent
-        last_close_value = df.loc[df.index[-1], "close"]
-
+    def bb_test(self, bb_df, last_close_value, buy=True):
         if buy:
             price_below_median = last_close_value < bb_df.iloc[-1][1]
             price_distance_to_lower = math.isclose(last_close_value, bb_df.iloc[-1][0], abs_tol=last_close_value/1000)

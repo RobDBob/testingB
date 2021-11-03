@@ -32,28 +32,41 @@ class TAAnalyzer:
         # print(f"---- type: {type(date_time_stamps_ms)}, value: {date_time_stamps_ms}")
         return pd.to_datetime(date_time_stamps_ms, unit='ms').dt.strftime(const.date_time_format)
 
-    def do_stuff(self, msg):
-        if (self.update_test_data(msg)):
-            buy = []
-            sell = []
-            buy.append(self.taTester.rsi_test(ta.rsi(self.df["close"], length=12), buy=True))
-            sell.append(self.taTester.rsi_test(ta.rsi(self.df["close"], length=12), buy=False))
+    def do_stuff_with_klline(self, msg):
+        df = self.convert_to_df_from_kline(msg)
+        if (self.update_test_data(df)):
+            self.run_tests_with_new_data()
+    
+    def run_tests_with_new_data(self):
+        buy = []
+        sell = []
+        rsi = ta.rsi(self.df["close"], length=12)
+        buy.append(self.taTester.rsi_test(rsi, buy=True))
+        sell.append(self.taTester.rsi_test(rsi, buy=False))
 
-            buy.append(self.taTester.stoch_test(ta.stoch(self.df["high"], self.df["low"], self.df["close"]), buy=True))
-            sell.append(self.taTester.stoch_test(ta.stoch(self.df["high"], self.df["low"], self.df["close"]), buy=False))
+        stoch = ta.stoch(self.df["high"], self.df["low"], self.df["close"])
+        buy.append(self.taTester.stoch_test(stoch, buy=True))
+        sell.append(self.taTester.stoch_test(stoch, buy=False))
 
-            buy.append(self.taTester.bb_test(self.df, buy=True))
-            sell.append(self.taTester.bb_test(self.df, buy=False))
-            
-            self.logger.info(f"Close: . BUY: {all(buy)}, SELL: {all(sell)}")
+        bb = ta.bbands(self.df["close"], length=18, std=2)
+        # check where price touches and trend
+        # iloc[-1, ] 
+        # column indexes: 0:BBLow, 1:BBMedian, 2:BBUpper, 3:BBBandwidth, 4:BBPercent
+        last_close_value = self.df.loc[self.df.index[-1], "close"]
+        buy.append(self.taTester.bb_test(bb, last_close_value, buy=True))
+        sell.append(self.taTester.bb_test(bb, last_close_value, buy=False))
+        
+        #self.logger.info(f"Close: . BUY: {all(buy)}, SELL: {all(sell)}")
 
-            if all(buy):
-                print(f"SELL action, at close price: {self.df.loc[self.df.index[-1], 'close']} ")
-                # self.buy()
+        if all(buy):
+            last_loc = self.df.index[-1]
+            self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: BUY action, at close price: {self.df.loc[last_loc, 'close']} ")
+            # self.buy()
 
-            if all(sell):
-                print(f"BUY action, at close price: {self.df.loc[self.df.index[-1], 'close']} ")
-                # self.sell()
+        if all(sell):
+            last_loc = self.df.index[-1]
+            self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: SELL action, at close price: {self.df.loc[last_loc, 'close']} ")
+            # self.sell()
 
     def buy(self):
         # order = self.client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=0.0001)
@@ -65,7 +78,7 @@ class TAAnalyzer:
         # self.logger(pprint(order))
         return
 
-    def callback_update_to_df_from_kline(self, msg):
+    def convert_to_df_from_kline(self, msg):
         data = {
             "dateTime": [msg['E']], 
             "open": [float(msg['k']['o'])], 
@@ -73,11 +86,7 @@ class TAAnalyzer:
             "low": [float(msg['k']['l'])], 
             "close": [float(msg['k']['c'])], 
             "volume": [float(msg['k']['v'])]}
-        df = self.convert_to_df(data)
-        self.update_test_data(df)
-
-        # ds = pd.Series(data=data, index="dateTime")
-        # columns_to_keep = ['dateTime', 'open', 'high', 'low', 'close', 'volume']
+        return self.convert_to_df(data)
 
     def convert_to_df(self, data):
         """
@@ -91,61 +100,66 @@ class TAAnalyzer:
         return df
 
     def update_test_data(self, df):
+        """
+        index: single value, timeStamp
+        """
         # ONLY UPDATE IF LANDS ON EXPECTED INTERVAL 
         interval_milliseconds = helpers.interval_to_milliseconds(self.kline_interval)
         id_time_stamp_near_interval = datetime.utcfromtimestamp(df.index[-1]/1000) > datetime.utcfromtimestamp((self.df.index[-1] + interval_milliseconds)/1000)
         
         if id_time_stamp_near_interval:
-            self.locked = True
-            try:
-                self.df = self.df.append(df)
-
-                print(f"Updated: {df.loc[df.index[-1], 'dateTime']}, new price: {df.loc[df.index[-1], 'close']}")
-
-            except Exception as e:
-                print(e)
-                return False
-                
-            finally:
-                self.locked = False
-                return True
-
+            self.df = self.df.append(df)
+            return True
         else:
             # print(f"Updated: FALSE: {self._get_datetime_single(msg['E'])} > {counted}")
             print(f"ping________________________ {df.loc[df.index[-1], 'dateTime']}")
             return False
 
 
-def start_web_socket(args, data_updater):
-    twm = ThreadedWebsocketManager(testnet=args.test_net)
-    twm.daemon = True
-    twm.start()
-    #twm.start_symbol_miniticker_socket(callback=data_frame.update_df, symbol=data_frame.symbol)
-    twm.start_kline_socket(callback=data_updater.callback_update_to_df_from_kline, symbol=args.symbol)
-    twm.join(timeout=args.timeout)
-
-def run_test_on_existind_data(args):
-    df = pd.read_pickle("2weekWorthBTCUSDT3m.pkl")
-    initial_df = df[:60]
-    later_df = df[60:]
-    data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=initial_df)
-    
-    for dx in range(len(later_df)):
-        data_updater.update_test_data(later_df.iloc[dx])
-    return
-
-def run_of_websocket(args):
+def start_web_socket(args):
     """
     Run program of initial data grab & websocket
     """
     client = getClient(test_net=args.test_net)
     historic_data = APIHelper.get_historical_data(client, args.symbol, howLongMinutes=60, kline_interval=args.interval)
     data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=historic_data)
-    start_web_socket(args, data_updater)
+
+    twm = ThreadedWebsocketManager(testnet=args.test_net)
+    twm.daemon = True
+    twm.start()
+    twm.start_kline_socket(callback=data_updater.do_stuff_with_klline, symbol=args.symbol)
+    twm.join(timeout=args.timeout)
+
+def run_test_on_existind_data(args):
+    """
+    reads test data from file
+    splits into initial set, and feed set
+    each of feed data is converted:
+    from DataFrame -> DataSeries -> Dictionary -> DataFrame because >.<
+    """
+    df = pd.read_pickle("2weekWorthBTCUSDT3m.pkl")
+    initial_df = df[:60]
+    later_df = df[60:]
+
+    data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=initial_df)
+    dataseries_columns = df.columns.tolist()
+
+    for dx in range(len(later_df)):
+        dataseries = later_df.iloc[dx]
+        dataseries_values = [[k] for k in dataseries.values.tolist()]
+
+        # assume first column is dataTime (string format; converted timestamp)
+        # this needs to be datatime (int format; timestamp)
+        dataseries_values[0][0] = dataseries.name
+        temp_dict = dict(zip(dataseries_columns, dataseries_values))
+        new_df = data_updater.convert_to_df(temp_dict)
+        
+        data_updater.update_test_data(new_df)
+        data_updater.run_tests_with_new_data()
 
 
 if __name__ == "__main__":
     args = CreateScriptArgs()
 
-    run_of_websocket(args)
-    # run_test_on_existind_data(args)
+    # start_web_socket(args)
+    run_test_on_existind_data(args)
