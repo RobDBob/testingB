@@ -40,25 +40,3 @@ def saveToFileCSV(results, filePath):
                 record["highPrice"],
                 record["lowPrice"],
                 record["lastPrice"]])
-
-
-def getHistoricalData(client, symbol, howLongMinutes, kline_interval):
-    # Calculate the timestamps for the binance api function
-    untilThisDate = datetime.utcnow()
-    sinceThisDate = untilThisDate - timedelta(minutes = howLongMinutes)
-    # Execute the query from binance - timestamps must be converted to strings !
-    candles = client.get_historical_klines(symbol, kline_interval, str(sinceThisDate), str(untilThisDate))
-    
-    # df = rewrite_data_cleanup(candle)
-    df = pd.DataFrame().from_records(candles)
-    df.columns = const.all_columns
-    
-    # # as timestamp is returned in ms, let us convert this back to proper timestamps.
-    df.set_index('dateTime', drop=False, inplace=True)
-    df.dateTime = pd.to_datetime(df.dateTime, unit='ms').dt.strftime(const.date_time_format)
-
-    # Get rid of columns we do not need
-    df = df.drop(const.columns_to_drop, axis=1)
-    df = convert_to_numeric(df, ['open', 'high', 'low', 'close', 'volume'])
-    
-    return df
