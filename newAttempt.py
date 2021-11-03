@@ -17,7 +17,7 @@ logger_name_high_level = "WebSocketPriceUpdaterTester"
 create_logger(logger_name_high_level, "TestRecords.log")
 
 class TAAnalyzer:
-    def __init__(self, symbol, kline_interval, historic_data=None, client=None):
+    def __init__(self, symbol, kline_interval, historic_data=None):
         self.symbol = symbol
         self.kline_interval = kline_interval
 
@@ -27,7 +27,6 @@ class TAAnalyzer:
             self.df = historic_data
 
         self.logger = logging.getLogger(logger_name_high_level)
-        self.client = client
         self.taTester = TATester(logger_name_detail)
     
     def _get_datetime_series(self, date_time_stamps_ms):
@@ -68,6 +67,15 @@ class TAAnalyzer:
         return
 
     def callback_update_to_df(self, msg):
+        # data = {
+        #     "dateTime": msg['E'], 
+        #     "open": float(msg['k']['o']), 
+        #     "high": float(msg['k']['h']), 
+        #     "low": float(msg['k']['l']), 
+        #     "close": float(msg['k']['c']), 
+        #     "volume":float(msg['k']['v'])}
+
+        # ds = pd.Series(data=data, index="dateTime")
         df = pd.DataFrame([[msg['E'], float(msg['k']['o']), float(msg['k']['h']), float(msg['k']['l']), float(msg['k']['c']), float(msg['k']['v'])]])
         df.columns = const.columns_to_keep
         df.set_index('dateTime', drop=False, inplace=True)
@@ -85,6 +93,7 @@ class TAAnalyzer:
                 self.df = self.df.append(df)
 
                 print(f"Updated: {df.loc[df.index[-1], 'dateTime']}, new price: {df.loc[df.index[-1], 'close']}")
+                print(self.df)
 
             except Exception as e:
                 print(e)
@@ -108,16 +117,29 @@ def start_web_socket(args, data_updater, test_net):
     twm.start_kline_socket(callback=data_updater.callback_update_to_df, symbol=data_updater.symbol)
     twm.join(timeout=args.timeout)
 
+def run_test_on_existind_data(args):
+    
+    # df = pd.read_json("weekWorthBTCUSDT3m.json")
+    # initial_df = df[60:]
+    # later_df = df[:60]
+    # data_updater = TAAnalyzer(symbol=args.symbol, kline_interval=interval, historic_data=initial_df)
+    # for dx in range(len(later_df)):
+    #     later_df
+    #     [dfa.iloc[k] for k in range(len(dfa))]
+    return
+
+def run_of_websocket(args):
+    """
+    Run program of initial data grab & websocket
+    """
+    client = getClient(test_net=args.test_net)
+    historic_data = APIHelper.get_historical_data(client, args.symbol, howLongMinutes=60, kline_interval=args.interval)
+    data_updater = TAAnalyzer(symbol=args.symbol, kline_interval=args.interval, historic_data=historic_data)
+    start_web_socket(args, data_updater, args.test_net)
+
 
 if __name__ == "__main__":
     args = CreateScriptArgs()
 
-    test_net = args.test_net
-    symbol = args.symbol
-    interval = args.interval
-    
-    client = getClient(test_net=test_net)
-    historic_data = APIHelper.get_historical_data(client, symbol, howLongMinutes=60, kline_interval=interval)
-    data_updater = TAAnalyzer(symbol=symbol, kline_interval=interval, historic_data=historic_data, client=client)
-
-    start_web_socket(args, data_updater, test_net)
+    run_of_websocket(args)
+    # run_test_on_existind_data(args)

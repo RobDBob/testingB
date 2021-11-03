@@ -33,6 +33,3 @@ def get_historical_data(client, symbol, howLongMinutes, kline_interval):
     
     return df
 
-
-def get_datetime_single(date_time_stamp_ms):
-    return datetime.utcfromtimestamp((int(date_time_stamp_ms)/1000)).strftime(const.date_time_format)
