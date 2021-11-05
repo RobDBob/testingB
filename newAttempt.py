@@ -1,13 +1,15 @@
+import pandas_ta as ta
+
 from Helpers.ScriptArguments import CreateScriptArgs
 from binance import ThreadedWebsocketManager, helpers
 from Playground.bFinanceAPIFunctions import getClient
 import pandas as pd
 from datetime import datetime
-import pandas_ta as ta
+import TestScenarios
+
 from MathFunctions.TATesting import TATester
-from Helpers import PandaFunctions, const, APIHelper, DateHelper
+from Helpers import const, APIHelper, DateHelper
 import logging
-from pprint import pprint
 from GetLogger import create_logger
 
 logger_name_detail = "WebSocketPriceUpdaterTester_detail"
@@ -34,49 +36,31 @@ class TAAnalyzer:
 
     def do_stuff_with_klline(self, msg):
         df = self.convert_to_df_from_kline(msg)
-        if (self.update_test_data(df)):
-            self.run_tests_with_new_data()
-    
-    def run_tests_with_new_data(self):
-        buy = []
-        sell = []
-        rsi = ta.rsi(self.df["close"], length=12)
-        buy.append(self.taTester.rsi_test(rsi, buy=True))
-        sell.append(self.taTester.rsi_test(rsi, buy=False))
+        if (self.update_data_on_tick(df)):
+            self.action_time()
 
-        stoch = ta.stoch(self.df["high"], self.df["low"], self.df["close"])
-        buy.append(self.taTester.stoch_test(stoch, buy=True))
-        sell.append(self.taTester.stoch_test(stoch, buy=False))
+    def action_time(self):
+        test_result = TestScenarios.data_test_1(self.taTester, self.df)
 
-        bb = ta.bbands(self.df["close"], length=18, std=2)
-        # check where price touches and trend
-        # iloc[-1, ] 
-        # column indexes: 0:BBLow, 1:BBMedian, 2:BBUpper, 3:BBBandwidth, 4:BBPercent
-        last_close_value = self.df.loc[self.df.index[-1], "close"]
-        buy.append(self.taTester.bb_test(bb, last_close_value, buy=True))
-        sell.append(self.taTester.bb_test(bb, last_close_value, buy=False))
-        
-        #self.logger.info(f"Close: . BUY: {all(buy)}, SELL: {all(sell)}")
+        # set cannot have dups, so if list len is == 1, it contains an uniformed decision
+        set_trade_result = set(test_result)
 
-        if all(buy):
-            last_loc = self.df.index[-1]
-            self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: BUY action, at close price: {self.df.loc[last_loc, 'close']} ")
-            # self.buy()
+        if len(set_trade_result) > 1:
+            "mixed messages, returning without action"
+            return
 
-        if all(sell):
-            last_loc = self.df.index[-1]
-            self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: SELL action, at close price: {self.df.loc[last_loc, 'close']} ")
-            # self.sell()
+        if const.TradeAction.buy in set_trade_result:
+            self.buy()
+        elif const.TradeAction.sell in set_trade_result:
+            self.sell()
 
     def buy(self):
-        # order = self.client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=0.0001)
-        # self.logger(pprint(order))
-        return
+        last_loc = self.df.index[-1]
+        self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: BUY at: {self.df.loc[last_loc, 'close']} ")
 
     def sell(self):
-        # order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=0.0001)
-        # self.logger(pprint(order))
-        return
+        last_loc = self.df.index[-1]
+        self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: SELL at: {self.df.loc[last_loc, 'close']} ")
 
     def convert_to_df_from_kline(self, msg):
         data = {
@@ -99,7 +83,7 @@ class TAAnalyzer:
         df.dateTime = DateHelper.get_datetime_single(df.dateTime)
         return df
 
-    def update_test_data(self, df):
+    def update_data_on_tick(self, df):
         """
         index: single value, timeStamp
         """
@@ -112,7 +96,7 @@ class TAAnalyzer:
             return True
         else:
             # print(f"Updated: FALSE: {self._get_datetime_single(msg['E'])} > {counted}")
-            print(f"ping________________________ {df.loc[df.index[-1], 'dateTime']}")
+            # print(f"ping________________________ {df.loc[df.index[-1], 'dateTime']}")
             return False
 
 
@@ -121,7 +105,7 @@ def start_web_socket(args):
     Run program of initial data grab & websocket
     """
     client = getClient(test_net=args.test_net)
-    historic_data = APIHelper.get_historical_data(client, args.symbol, howLongMinutes=60, kline_interval=args.interval)
+    historic_data = APIHelper.get_historical_data(client, args.symbol, timeWindowMinutes=60, kline_interval=args.interval)
     data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=historic_data)
 
     twm = ThreadedWebsocketManager(testnet=args.test_net)
@@ -137,25 +121,71 @@ def run_test_on_existind_data(args):
     each of feed data is converted:
     from DataFrame -> DataSeries -> Dictionary -> DataFrame because >.<
     """
-    df = pd.read_pickle("2weekWorthBTCUSDT3m.pkl")
-    initial_df = df[:60]
-    later_df = df[60:]
+    from MathFunctions.TATesting import TATester
+    log_strong_action = create_logger("strong", "ExistingData_strong.log")
+    log_mixed_action =  create_logger("mixed", "ExistingData_weak.log")
+    test_df = pd.read_pickle("4weekWorthBTCUSDT1mLive.pkl")
+    # test_df = pd.read_pickle("1dayWorthBTCUSDT1mLive.pkl")
+    initial_df = test_df[:60]
+    incoming_data = test_df[60:]
 
     data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=initial_df)
-    dataseries_columns = df.columns.tolist()
 
-    for dx in range(len(later_df)):
-        dataseries = later_df.iloc[dx]
-        dataseries_values = [[k] for k in dataseries.values.tolist()]
+    monitor_price = False
+    monitored_prices = []
+    price_trend = 0
 
-        # assume first column is dataTime (string format; converted timestamp)
-        # this needs to be datatime (int format; timestamp)
-        dataseries_values[0][0] = dataseries.name
-        temp_dict = dict(zip(dataseries_columns, dataseries_values))
-        new_df = data_updater.convert_to_df(temp_dict)
+    for dx in range(len(incoming_data)):
+        new_df = incoming_data.iloc[[dx]]
         
-        data_updater.update_test_data(new_df)
-        data_updater.run_tests_with_new_data()
+        
+        if data_updater.update_data_on_tick(new_df):
+            # updates data only on matching interval: true / false from update_test_data
+            # interval tick landed
+            bbvol = ta.bbands(data_updater.df["volume"], length=18, std=2)
+
+            if bbvol.tail(1)["BBP_18_2.0"].values[0] > 1:
+                # abnormal market volume trading , maybe singal to buy or sell
+                # might influence price move
+                monitor_price = True
+                # log.info("bbvol: monitor price: TRUE")
+
+        # controlling flags:
+        if monitor_price:
+            recent_prices = data_updater.df.tail(2)["close"].values # order index 0: most recent
+            trend_decreasing = recent_prices[0] < recent_prices[1]
+            monitored_prices.append(trend_decreasing)
+
+            if len(set(monitored_prices)) == 1: # set cannot have duplicates, so 1 for all elements being same
+                # same trend, carry on
+                continue
+            else:
+                # trend changed, hard stop to evaluate other tests
+                rsi = ta.rsi(data_updater.df["close"], length=12)
+                rsi_test_result = data_updater.taTester.rsi_test(rsi, buy=trend_decreasing)
+
+                stoch = ta.stoch(data_updater.df["high"], data_updater.df["low"], data_updater.df["close"])
+                stoch_test_result = data_updater.taTester.stoch_test(stoch, buy=trend_decreasing)
+
+                data_updater.df["close"]
+                
+                if len(set([trend_decreasing, rsi_test_result, stoch_test_result]))==1:
+                    log_strong_action.info(f"BUY: {trend_decreasing}? Stamp: {data_updater.df.dateTime.tail(1).values[0]}, Price: {data_updater.df.close.tail(1).values[0]}")
+                else:
+                    log_mixed_action.info(f"BUY: {trend_decreasing}? Stamp: {data_updater.df.dateTime.tail(1).values[0]}, Price: {data_updater.df.close.tail(1).values[0]}; rsi:{rsi_test_result}, sto:{stoch_test_result}")
+
+                monitor_price = False
+                monitored_prices.clear()
+
+        else:
+            monitored_prices.clear()
+        
+        
+        
+        
+        # TestScenarios.data_test_1(data_updater.taTester, data_updater.df)
+        
+        # TestScenarios.data_test_1(data_updater.taTester, data_updater.df)
 
 
 if __name__ == "__main__":
