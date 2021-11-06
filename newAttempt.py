@@ -13,13 +13,13 @@ import logging
 from GetLogger import create_logger
 
 logger_name_detail = "WebSocketPriceUpdaterTester_detail"
-create_logger(logger_name_detail, "TestRecords_detail.log")
+create_logger(logger_name_detail, "LOG_TestRecords_detail.log")
 
 logger_name_high_level = "WebSocketPriceUpdaterTester"
-create_logger(logger_name_high_level, "TestRecords.log")
+create_logger(logger_name_high_level, "LOG_TestRecords.log")
 
-class TAAnalyzer:
-    def __init__(self, kline_interval, historic_data=None):
+class HQBrain:
+    def __init__(self, kline_interval, historic_data=None, logger=None):
         self.kline_interval = kline_interval
 
         if historic_data is None:
@@ -27,12 +27,18 @@ class TAAnalyzer:
         else:
             self.df = historic_data
 
+        
         self.logger = logging.getLogger(logger_name_high_level)
-        self.taTester = TATester(logger_name_detail)
+        # self.taTester = TATester(logger_name_detail)
+        self.taTester = TATester(logger)
     
     def _get_datetime_series(self, date_time_stamps_ms):
         # print(f"---- type: {type(date_time_stamps_ms)}, value: {date_time_stamps_ms}")
         return pd.to_datetime(date_time_stamps_ms, unit='ms').dt.strftime(const.date_time_format)
+
+    @property
+    def current_datetime(self):
+        return self.df.dateTime.tail(1).values[0]
 
     def do_stuff_with_klline(self, msg):
         df = self.convert_to_df_from_kline(msg)
@@ -49,9 +55,9 @@ class TAAnalyzer:
             "mixed messages, returning without action"
             return
 
-        if const.TradeAction.buy in set_trade_result:
+        if const.TA.buy in set_trade_result:
             self.buy()
-        elif const.TradeAction.sell in set_trade_result:
+        elif const.TA.sell in set_trade_result:
             self.sell()
 
     def buy(self):
@@ -106,7 +112,7 @@ def start_web_socket(args):
     """
     client = getClient(test_net=args.test_net)
     historic_data = APIHelper.get_historical_data(client, args.symbol, timeWindowMinutes=60, kline_interval=args.interval)
-    data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=historic_data)
+    data_updater = HQBrain(kline_interval=args.interval, historic_data=historic_data)
 
     twm = ThreadedWebsocketManager(testnet=args.test_net)
     twm.daemon = True
@@ -122,74 +128,45 @@ def run_test_on_existind_data(args):
     from DataFrame -> DataSeries -> Dictionary -> DataFrame because >.<
     """
     from MathFunctions.TATesting import TATester
-    log_strong_action = create_logger("strong", "ExistingData_strong.log")
-    log_mixed_action =  create_logger("mixed", "ExistingData_weak.log")
-    test_df = pd.read_pickle("4weekWorthBTCUSDT1mLive.pkl")
+    from PriceWatcher import PriceWatcher
+    from SignalTrigger import SignalTrigger
+    
+    # test_df = pd.read_pickle("4weekWorthBTCUSDT1mLive.pkl")
     # test_df = pd.read_pickle("1dayWorthBTCUSDT1mLive.pkl")
+    test_df = pd.read_pickle("1weekWorthBTCUSDT1mLive.pkl")
     initial_df = test_df[:60]
     incoming_data = test_df[60:]
 
-    data_updater = TAAnalyzer(kline_interval=args.interval, historic_data=initial_df)
+    logger = create_logger("DataTest2", "LOG_Scenario_price_check.log")
+    
+    data_holder = HQBrain(kline_interval=args.interval, historic_data=initial_df, logger=logger)
 
     monitor_price = False
-    monitored_prices = []
-    price_trend = 0
+    log_flag_monitor_price = False
+    
+    price_watcher = PriceWatcher(data_holder, logger)
+    signal_trigger = SignalTrigger(data_holder, logger)
 
     for dx in range(len(incoming_data)):
         new_df = incoming_data.iloc[[dx]]
-        
-        
-        if data_updater.update_data_on_tick(new_df):
-            # updates data only on matching interval: true / false from update_test_data
-            # interval tick landed
-            bbvol = ta.bbands(data_updater.df["volume"], length=18, std=2)
 
-            if bbvol.tail(1)["BBP_18_2.0"].values[0] > 1:
-                # abnormal market volume trading , maybe singal to buy or sell
-                # might influence price move
-                monitor_price = True
-                # log.info("bbvol: monitor price: TRUE")
-
-        # controlling flags:
-        if monitor_price:
-            recent_prices = data_updater.df.tail(2)["close"].values # order index 0: most recent
-            trend_decreasing = recent_prices[0] < recent_prices[1]
-            monitored_prices.append(trend_decreasing)
-
-            if len(set(monitored_prices)) == 1: # set cannot have duplicates, so 1 for all elements being same
-                # same trend, carry on
-                continue
-            else:
-                # trend changed, hard stop to evaluate other tests
-                rsi = ta.rsi(data_updater.df["close"], length=12)
-                rsi_test_result = data_updater.taTester.rsi_test(rsi, buy=trend_decreasing)
-
-                stoch = ta.stoch(data_updater.df["high"], data_updater.df["low"], data_updater.df["close"])
-                stoch_test_result = data_updater.taTester.stoch_test(stoch, buy=trend_decreasing)
-
-                data_updater.df["close"]
+        # if data_holder.update_data_on_tick(new_df):
+        data_holder.df = data_holder.df.append(new_df)
+        monitor_price = signal_trigger.check_bbvol() or signal_trigger.check_macd_asmode()
                 
-                if len(set([trend_decreasing, rsi_test_result, stoch_test_result]))==1:
-                    log_strong_action.info(f"BUY: {trend_decreasing}? Stamp: {data_updater.df.dateTime.tail(1).values[0]}, Price: {data_updater.df.close.tail(1).values[0]}")
-                else:
-                    log_mixed_action.info(f"BUY: {trend_decreasing}? Stamp: {data_updater.df.dateTime.tail(1).values[0]}, Price: {data_updater.df.close.tail(1).values[0]}; rsi:{rsi_test_result}, sto:{stoch_test_result}")
-
-                monitor_price = False
-                monitored_prices.clear()
-
-        else:
-            monitored_prices.clear()
-        
-        
-        
-        
-        # TestScenarios.data_test_1(data_updater.taTester, data_updater.df)
-        
-        # TestScenarios.data_test_1(data_updater.taTester, data_updater.df)
-
+        if monitor_price:
+            if log_flag_monitor_price is False:
+                logger.info(f"{data_holder.current_datetime}: START WATCHING")
+                log_flag_monitor_price = True
+            
+            monitor_price = price_watcher.recalculate_conditions()
+            
+            if monitor_price is False:
+                logger.info(f"{data_holder.current_datetime}: STOP WATCHING \n")
+                log_flag_monitor_price = False
+                # change of price- what's the plan?
 
 if __name__ == "__main__":
     args = CreateScriptArgs()
-
     # start_web_socket(args)
     run_test_on_existind_data(args)

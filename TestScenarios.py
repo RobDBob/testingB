@@ -1,10 +1,11 @@
 from MathFunctions.TATesting import TATester
 import pandas_ta as ta
-
+from GetLogger import create_logger
+from Helpers import const
 
 def data_test_1(taTester: TATester, df):
     """
-    returns a list of individual test results with suggested trade action: [const.TradeAction, TradeAction]
+    returns a list of individual test results with suggested trade action: [const.TA, TA]
     
     """
     test_result = []
@@ -22,3 +23,4 @@ def data_test_1(taTester: TATester, df):
     test_result.append(taTester.bb_test(bb, last_close_value, buy=True))
     
     return test_result
+
