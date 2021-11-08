@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 import pandas as pd
 import json
-from Helpers import const
+from Helpers import DateHelper, const
 
 def print_data_types(df):
     print(df.dtypes)
@@ -40,3 +40,16 @@ def saveToFileCSV(results, filePath):
                 record["highPrice"],
                 record["lowPrice"],
                 record["lastPrice"]])
+
+def get_df_from_db_records(db_records):
+    """
+    records in database are stored with timestamp unit: sec instead of milisecs
+    need to conver secs to milisecs hence *1000
+    """
+    db_df = pd.DataFrame().from_records(db_records)
+    db_df=db_df.apply(pd.to_numeric)
+    db_df.columns=const.columns_to_keep
+    db_df.dateTime = db_df.dateTime * 1000
+    db_df.set_index('dateTime', inplace=True, drop=False)
+    db_df.dateTime = DateHelper.get_datetime_series(db_df.dateTime)
+    return db_df

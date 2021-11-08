@@ -2,10 +2,9 @@ from MathFunctions.TATesting import TATester
 import pandas_ta as ta
 from GetLogger import create_logger
 from Helpers import const
-from newAttempt import HQBrain
 
 class PriceWatcher:
-    def __init__(self, data_holder: HQBrain, logger) -> None:
+    def __init__(self, data_holder, logger) -> None:
         self.data_holder = data_holder
         self.logger = logger
         self.monitored_trend = []

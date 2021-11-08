@@ -1,8 +1,7 @@
 import pandas_ta as ta
-from newAttempt import HQBrain
 
 class SignalTrigger:
-    def __init__(self, data_holder: HQBrain, logger) -> None:
+    def __init__(self, data_holder, logger) -> None:
         self.data_holder = data_holder
         self.logger = logger
 
