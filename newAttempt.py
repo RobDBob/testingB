@@ -1,3 +1,4 @@
+import pandas_ta as ta
 from Helpers.ScriptArguments import CreateScriptArgs
 from binance import ThreadedWebsocketManager, helpers
 from Playground.bFinanceAPIFunctions import getClient
@@ -86,6 +87,7 @@ class HQBrain:
 
     def update_data_on_tick(self, df):
         """
+        tick may / may not land exactly on a interval mark, hence it might be of by a sec or few
         index: single value, timeStamp
         """
         # ONLY UPDATE IF LANDS ON EXPECTED INTERVAL 
@@ -184,29 +186,63 @@ def run_test_on_existind_data_from_db(args):
     data_hq = HQBrain(kline_interval=args.interval, historic_data=idf, logger=logger)
 
     monitor_price = False
-    log_flag_monitor_price = False
     
     price_watcher = PriceWatcher(data_hq, logger)
     signal_trigger = SignalTrigger(data_hq, logger)
+
+    from Helpers.PriceCheckSession import PriceCheckSession
+    session_open = None
+    rsi_value = None
+
+    last_price = 0
 
     # for record in remaining_records:
     for dx in range(len(ndf)):
         new_df = ndf.iloc[[dx]]
 
         if data_hq.update_data_on_tick(new_df):
-            monitor_price = signal_trigger.check_bbvol() or signal_trigger.check_macd_asmode()
-                    
-            if monitor_price:
-                if log_flag_monitor_price is False:
-                    logger.info(f"{data_hq.current_datetime}: START WATCHING")
-                    log_flag_monitor_price = True
-                
-                monitor_price = price_watcher.recalculate_conditions()
-                
-                if monitor_price is False:
-                    logger.info(f"{data_hq.current_datetime}: STOP WATCHING \n")
-                    log_flag_monitor_price = False
-                    # change of price- what's the plan?
+            # monitor_price = signal_trigger.check_rsi()
+
+
+            if session_open is None:
+                # monitor_price = signal_trigger.check_bbvol() or signal_trigger.check_macd_asmode() or signal_trigger.check_rsi()
+                # monitor_price = signal_trigger.check_rsi()
+                rsi = ta.rsi(data_hq.df["close"], length=12)
+                rsi_value = rsi.tail(1).values[0]
+                monitor_price = rsi_value < 30 or rsi_value > 70
+            
+            
+        if monitor_price:
+            session_open = session_open if session_open is not None else PriceCheckSession(logger, data_hq.current_datetime)
+            
+            if session_open.initial_trend_increasing is None:
+                # if rsi_value < 30 and ta.increasing(ta.sma(data_hq.df.close, length=21), asint=False).tail(1).values[0] == False:
+                # rsi_value
+                session_open.initial_trend_increasing = ta.increasing(ta.sma(data_hq.df.close, length=21), length=5, asint=False).tail(1).values[0]
+
+            # if session_open.initial_trend_increasing:
+            #     price_above_average = ta.tsignals(data_hq.df.close > )
+
+            # check if trend continues
+            # check if trend is increasing over last 3 values for sma length = 21
+            if len({session_open.initial_trend_increasing, ta.increasing(ta.sma(data_hq.df.close, length=21), asint=False, length=3).tail(1).values[0]}) == 1:
+                continue
+
+            else: # change of trend - ACTION TIME
+                # monitor_price = price_watcher.recalculate_conditions()
+                action = "sell" if session_open.initial_trend_increasing else "buy"
+                if action == "sell" and (data_hq.df.tail(1).close.values[0] - last_price) > 0:
+                    earned = ", =MADE_MONEY"
+                elif action == "sell":
+                    earned = ", =LOST_MONEY"
+                else:
+                    earned = ""
+
+                logger.info(f"{data_hq.current_datetime}: {action}, Price: {data_hq.df.tail(1).close.values[0]}{earned}")
+                session_open.session_to_close()
+                session_open = None
+                last_price = data_hq.df.tail(1).close.values[0]
+            
 
 if __name__ == "__main__":
     args = CreateScriptArgs()

@@ -11,6 +11,13 @@ class SignalTrigger:
             return True
         return False
 
+    def check_rsi(self):
+        length = 12
+        rsi = ta.rsi(self.data_holder.df["close"], length=length)
+        value = rsi.tail(1).values[0]
+        test_result = value < 30 or value > 70
+        return self._return_result(f"RSI{length}", test_result)
+
     def check_bbvol(self):
         length = 18
         std = 2

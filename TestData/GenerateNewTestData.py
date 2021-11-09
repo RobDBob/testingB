@@ -4,7 +4,7 @@ from binance import helpers
 from Helpers import PandaFunctions, DBFunctions 
 
 
-def generate_from_db(interval="1m", save_to_csv_filename=None):
+def generate_from_db(interval="1m", save_to_csv_filename=None, start_timestamp=0):
     """
     generate test data for comparing results
 
@@ -40,7 +40,7 @@ def generate_from_db(interval="1m", save_to_csv_filename=None):
     """
     interval_seconds = int(helpers.interval_to_milliseconds(interval)/1000)
 
-    raw_records = DBFunctions.get_records_after_timestamp(0)
+    raw_records = DBFunctions.get_records_after_timestamp(start_timestamp)
 
     all_df_wo_interval = PandaFunctions.get_df_from_db_records(raw_records)
 
