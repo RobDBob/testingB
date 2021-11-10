@@ -5,7 +5,6 @@ all_columns = ['dateTime', 'open', 'high', 'low', 'close', 'volume', 'closeTime'
 columns_to_drop = ['closeTime', 'quoteAssetVolume', 'takerBuyBaseVol','takerBuyQuoteVol','ignore']
 columns_to_keep = ['dateTime', 'open', 'high', 'low', 'close', 'volume', 'numberOfTrades']
 
-class TA(Enum):
-    buy = 1
-    sell = -1
-    other = 0
+class TransactionType(Enum):
+    buy = "buy"
+    sell = "sell"

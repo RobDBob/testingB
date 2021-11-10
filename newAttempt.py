@@ -3,9 +3,11 @@ from Helpers.ScriptArguments import CreateScriptArgs
 from binance import ThreadedWebsocketManager, helpers
 from Playground.bFinanceAPIFunctions import getClient
 import pandas as pd
+
+from time import time
 from datetime import datetime
 import TestScenarios
-
+from FinanceFunctions.Ledger import CoinLedger
 from MathFunctions.TATesting import TATester
 from Helpers import const, APIHelper, DateHelper, PandaFunctions, DBFunctions 
 from MathFunctions.TATesting import TATester
@@ -19,6 +21,24 @@ create_logger(logger_name_detail, "LOG_TestRecords_detail.log")
 
 logger_name_high_level = "WebSocketPriceUpdaterTester"
 create_logger(logger_name_high_level, "LOG_TestRecords.log")
+"""
+from time import time
+import pandas as pd
+import pandas_ta as ta
+from Helpers import const, APIHelper, DateHelper, PandaFunctions, DBFunctions 
+import matplotlib.pyplot as plt
+
+records = DBFunctions.get_records_after_timestamp(time()-3600*12)
+
+records_60s = [k for k in records if not k[0] % 60]
+len(records_60s)
+df = PandaFunctions.get_df_from_db_records(records_60s)
+
+df.ta.strategy()
+df.plot(x="dateTime", y="close")
+plt.show()
+
+"""
 
 class HQBrain:
     def __init__(self, kline_interval, historic_data=None, logger=None):
@@ -51,9 +71,9 @@ class HQBrain:
             "mixed messages, returning without action"
             return
 
-        if const.TA.buy in set_trade_result:
+        if const.TransactionType.buy in set_trade_result:
             self.buy()
-        elif const.TA.sell in set_trade_result:
+        elif const.TransactionType.sell in set_trade_result:
             self.sell()
 
     def buy(self):
@@ -170,13 +190,14 @@ def run_test_on_existind_data_from_db(args):
     each of feed data is converted:
     from DataFrame -> DataSeries -> Dictionary -> DataFrame because >.<
     """
-    first_record = DBFunctions.get_first_record()
-    first_hour_records = DBFunctions.get_first_hour_records(first_record)
-    remaining_raw_records = DBFunctions.get_all_after_first_hour_records(first_record)
+    initial_time_stamp = int(time())-72*3600
+
+    first_hour_records = DBFunctions.get_records_between_timestamps(initial_time_stamp, initial_time_stamp+3600)
+    remaining_raw_records = DBFunctions.get_records_after_timestamp(initial_time_stamp+3600)
 
     # get first hour records on 1min interval
-    minutes_interval = int(helpers.interval_to_milliseconds(args.interval)/1000)
-    first_hour_records_w_interval = [k for k in first_hour_records if not k[0] % minutes_interval]
+    iterval_seconds = int(helpers.interval_to_milliseconds(args.interval)/1000)
+    first_hour_records_w_interval = [k for k in first_hour_records if not k[0] % iterval_seconds]
     print(len(first_hour_records_w_interval))
 
     idf = PandaFunctions.get_df_from_db_records(first_hour_records_w_interval) # initial df
@@ -189,6 +210,9 @@ def run_test_on_existind_data_from_db(args):
     
     price_watcher = PriceWatcher(data_hq, logger)
     signal_trigger = SignalTrigger(data_hq, logger)
+
+    ledger = CoinLedger(logger)
+    ledger.bank = 1000
 
     from Helpers.PriceCheckSession import PriceCheckSession
     session_open = None
@@ -225,23 +249,36 @@ def run_test_on_existind_data_from_db(args):
 
             # check if trend continues
             # check if trend is increasing over last 3 values for sma length = 21
-            if len({session_open.initial_trend_increasing, ta.increasing(ta.sma(data_hq.df.close, length=21), asint=False, length=3).tail(1).values[0]}) == 1:
+            if len({session_open.initial_trend_increasing, ta.increasing(ta.sma(data_hq.df.close, length=9), asint=False).tail(1).values[0]}) == 1:
                 continue
 
             else: # change of trend - ACTION TIME
-                # monitor_price = price_watcher.recalculate_conditions()
-                action = "sell" if session_open.initial_trend_increasing else "buy"
-                if action == "sell" and (data_hq.df.tail(1).close.values[0] - last_price) > 0:
-                    earned = ", =MADE_MONEY"
-                elif action == "sell":
-                    earned = ", =LOST_MONEY"
-                else:
-                    earned = ""
+                current_price = data_hq.df.tail(1).close.values[0]
+                current_time = data_hq.df.tail(1).dateTime.values[0]
 
-                logger.info(f"{data_hq.current_datetime}: {action}, Price: {data_hq.df.tail(1).close.values[0]}{earned}")
+                action = "sell" if session_open.initial_trend_increasing else "buy"
+
+                if action == "sell":
+                    ledger.propose_sell(current_price, current_time)
+                
+                
+                try:
+                    if action == "buy":
+                        ledger.propose_buy(current_price, current_time)
+                except:
+                    break
+
+                # logger.info(f"{data_hq.current_datetime}: {action}, Price: {data_hq.df.tail(1).close.values[0]}{earned}")
                 session_open.session_to_close()
                 session_open = None
-                last_price = data_hq.df.tail(1).close.values[0]
+                monitor_price= False
+        
+        last_price = data_hq.df.tail(1).close.values[0]
+
+    logger.info(f"The END: bank_money: {ledger.bank}, coins: {ledger.available_coins}, last price recorded: {last_price}")
+    logger.info(f"Potential worth: {last_price*ledger.available_coins+ledger.bank}")
+    logger.info(f"All transactions: {len(ledger.transaction_history)}, active_transactions: {len([k for k in ledger.transaction_history if k.active])}")
+
             
 
 if __name__ == "__main__":

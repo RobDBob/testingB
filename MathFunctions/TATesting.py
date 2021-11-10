@@ -1,6 +1,6 @@
 import math
 import pandas_ta as ta
-from Helpers.const import TA
+from Helpers.const import TransactionType
 
 class TATester:
     def __init__(self, logger) -> None:
@@ -8,10 +8,10 @@ class TATester:
 
     def _set_return_code(self, buy_test, sell_test):
         if buy_test:
-            return TA.buy
+            return TransactionType.buy
         if sell_test:
-            return TA.sell
-        return TA.other
+            return TransactionType.sell
+        return TransactionType.other
 
     def stoch_test(self, stoch_df):
         """

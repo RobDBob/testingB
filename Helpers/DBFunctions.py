@@ -1,5 +1,6 @@
 import psycopg2
 import time
+from Helpers.DateHelper import get_datetime_single_from_ms
 
 config = {"host":"192.168.1.34",
         "port":5555,
@@ -47,15 +48,18 @@ def get_first_record():
 
 def get_first_hour_records(first_record=None):
     first_record = first_record if not None else get_first_record()
-    sql_select_records_between = 'select * from "bpricesBTCUSDT" bb where bb."timestamp"  >= {0} and bb."timestamp" < {1};'
-    query_result = execute_query(sql_select_records_between.format(first_record[0], first_record[0]+3600), fetch=True)
-    print(f"get_first_hour_records count: {len(query_result)}")
-    return query_result
+    return get_records_between_timestamps(first_record[0], first_record[0]+3600)
 
 def get_all_after_first_hour_records(first_record=None):
     first_record = first_record if not None else get_first_record()
     timestamp = first_record[0]+3600
     return get_records_after_timestamp(timestamp)
+
+def get_records_between_timestamps(from_timestamp, to_timestamp):
+    sql_select_records_between = f'select * from "bpricesBTCUSDT" bb where bb."timestamp"  > {from_timestamp} and bb."timestamp" < {to_timestamp};'
+    query_result = execute_query(sql_select_records_between, fetch=True)
+    print(f"get_records_between_timestamps {get_datetime_single_from_ms(from_timestamp*1000)} - {get_datetime_single_from_ms(to_timestamp*1000)} count: {len(query_result)}")
+    return query_result
 
 def get_records_after_timestamp(timestamp):
     """
@@ -63,5 +67,5 @@ def get_records_after_timestamp(timestamp):
     """
     sql_select_records_after = 'select * from "bpricesBTCUSDT" bb where bb."timestamp"  >= {0};'
     query_result = execute_query(sql_select_records_after.format(timestamp), fetch=True)
-    print(f"get_records_after_timestamp, timestamp: {get_records_after_timestamp}; record count: {len(query_result)}")
+    print(f"get_records_after_timestamp, timestamp: {get_datetime_single_from_ms(timestamp*1000)}; record count: {len(query_result)}")
     return query_result

@@ -34,7 +34,7 @@ class PriceWatcher:
             # trend changed, hard stop to evaluate other tests
             results = [self.recalculate_rsi()] # self.recalculate_stoch(), 
 
-            if len(set(results)) == 1 and const.TA.other not in results:
+            if len(set(results)) == 1 and const.TransactionType.other not in results:
                 # log_strong_action.info(f"Action: {rsi_test_result}, Price: {self.data_updater.df.close.tail(1).values[0]}")
                 self.logger.info(f"{self.data_holder.current_datetime}: SOLID _____________________ , Price: {recent_prices[1]}")
             # else:
