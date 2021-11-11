@@ -1,4 +1,6 @@
+import numpy as np
 import pandas_ta as ta
+from pandas_ta.utils import data
 from Helpers.ScriptArguments import CreateScriptArgs
 from binance import ThreadedWebsocketManager, helpers
 from Playground.bFinanceAPIFunctions import getClient
@@ -48,6 +50,10 @@ class HQBrain:
             self.df = pd.DataFrame()
         else:
             self.df = historic_data
+        
+        # to indicate trades, for last drawning / analysis
+        self.df["traded"]=np.nan
+
         self.logger = logging.getLogger(logger_name_high_level)
         # self.taTester = TATester(logger_name_detail)
         self.taTester = TATester(logger)
@@ -213,6 +219,7 @@ def run_test_on_existind_data_from_db(args):
 
     ledger = CoinLedger(logger)
     ledger.bank = 1000
+    ledger.coin_value_to_buy = 50
 
     from Helpers.PriceCheckSession import PriceCheckSession
     session_open = None
@@ -253,18 +260,18 @@ def run_test_on_existind_data_from_db(args):
                 continue
 
             else: # change of trend - ACTION TIME
-                current_price = data_hq.df.tail(1).close.values[0]
-                current_time = data_hq.df.tail(1).dateTime.values[0]
+                current_time_stamp = data_hq.df.tail(1).index.values[0]
+                current_price = data_hq.df.at[current_time_stamp, "close"]
+                
 
                 action = "sell" if session_open.initial_trend_increasing else "buy"
 
-                if action == "sell":
-                    ledger.propose_sell(current_price, current_time)
-                
-                
+                if action == "sell" and ledger.propose_sell(current_price, current_time_stamp):
+                    data_hq.df.at[current_time_stamp, "traded"] = current_price
+                    
                 try:
-                    if action == "buy":
-                        ledger.propose_buy(current_price, current_time)
+                    if action == "buy" and ledger.propose_buy(current_price, current_time_stamp):
+                        data_hq.df.at[current_time_stamp, "traded"] = -current_price
                 except:
                     break
 
@@ -276,9 +283,13 @@ def run_test_on_existind_data_from_db(args):
         last_price = data_hq.df.tail(1).close.values[0]
 
     logger.info(f"The END: bank_money: {ledger.bank}, coins: {ledger.available_coins}, last price recorded: {last_price}")
-    logger.info(f"Potential worth: {last_price*ledger.available_coins+ledger.bank}")
+    logger.info(f"Potential worth (with potential loss): {last_price*ledger.available_coins+ledger.bank}")
+    logger.info(f"Actual worth (without loss): {ledger.sum_of_active_transactions()+ledger.bank}")
     logger.info(f"All transactions: {len(ledger.transaction_history)}, active_transactions: {len([k for k in ledger.transaction_history if k.active])}")
+    logger.info(f"All transactions: {[k.coin_value for k in ledger.transaction_history if k.active]}")
 
+    # df[df["traded"].notnull()]
+    # to plot with prices
             
 
 if __name__ == "__main__":

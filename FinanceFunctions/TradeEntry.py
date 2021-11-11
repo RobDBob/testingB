@@ -3,7 +3,8 @@ import uuid
 
 
 class TradeEntryBase:
-    def __init__(self, trade_fee, transaction_time, quantity, coin_value, trasnaction_type:TransactionType):
+    def __init__(self, trade_fee:float, transaction_time:int, quantity:float, coin_value:float, trasnaction_type:TransactionType):
+
         self._transaction_time = transaction_time
         self._quantity = quantity
         self._coin_value = coin_value
