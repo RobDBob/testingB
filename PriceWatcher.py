@@ -4,27 +4,27 @@ from GetLogger import create_logger
 from Helpers import const
 
 class PriceWatcher:
-    def __init__(self, data_holder, logger) -> None:
-        self.data_holder = data_holder
+    def __init__(self, df, logger) -> None:
+        self.df = df
         self.logger = logger
         self.monitored_trend = []
         self.log_flag_monitor_price = False
 
     def recalculate_rsi(self):
-        rsi = ta.rsi(self.data_holder.df["close"], length=12)
+        rsi = ta.rsi(self.df["close"], length=12)
         rsi_test_result = self.data_holder.taTester.rsi_test(rsi)
         self.logger.info(f"RSI: {rsi_test_result}")
         return rsi_test_result
 
     def recalculate_stoch(self):
-        stoch = ta.stoch(self.data_holder.df["high"], self.data_holder.df["low"], self.data_holder.df["close"])
+        stoch = ta.stoch(self.df["high"], self.df["low"], self.df["close"])
         stoch_test_result = self.data_holder.taTester.stoch_test(stoch)
         self.logger.info(f"STOCH: {stoch_test_result}")
         return stoch_test_result
 
     def recalculate_conditions(self):
         # controlling flags:
-        recent_prices = self.data_holder.df.tail(2)["close"].values # order index 1: most recent
+        recent_prices = self.df.tail(2)["close"].values # order index 1: most recent
         self.monitored_trend.append(recent_prices[0] < recent_prices[1])
 
         if len(set(self.monitored_trend)) == 1: # set cannot have duplicates, so 1 for all elements being same
@@ -42,3 +42,23 @@ class PriceWatcher:
 
             self.monitored_trend.clear()
             return False
+
+    def scenario_some_profit(self, session_open):
+        if session_open.initial_trend_increasing is None:
+            # if rsi_value < 30 and ta.increasing(ta.sma(data_hq.df.close, length=21), asint=False).tail(1).values[0] == False:
+            # rsi_value
+            df_sma = ta.sma(self.df.close, length=9)
+            session_open.initial_trend_increasing = ta.increasing(df_sma, length=4, asint=False).tail(1).values[0]
+
+        # check if trend continues
+        # check if trend is increasing over last 3 values for sma length = 21
+        df_sma = ta.sma(self.df.close, length=9)
+        updated_trend = ta.increasing(df_sma, length=4, asint=False).tail(1).values[0]
+        if len({session_open.initial_trend_increasing, updated_trend}) == 1:
+            return False
+
+        else: # change of trend - ACTION TIME
+            return True
+
+    def simple(self):
+        return 

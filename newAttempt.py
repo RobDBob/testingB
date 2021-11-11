@@ -1,6 +1,5 @@
 import numpy as np
 import pandas_ta as ta
-from pandas_ta.utils import data
 from Helpers.ScriptArguments import CreateScriptArgs
 from binance import ThreadedWebsocketManager, helpers
 from Playground.bFinanceAPIFunctions import getClient
@@ -11,7 +10,7 @@ from datetime import datetime
 import TestScenarios
 from FinanceFunctions.Ledger import CoinLedger
 from MathFunctions.TATesting import TATester
-from Helpers import const, APIHelper, DateHelper, PandaFunctions, DBFunctions 
+from Helpers import const, APIHelper, DateHelper, PandaFunctions, DBFunctions , Plotter
 from MathFunctions.TATesting import TATester
 from PriceWatcher import PriceWatcher
 from SignalTrigger import SignalTrigger
@@ -52,7 +51,8 @@ class HQBrain:
             self.df = historic_data
         
         # to indicate trades, for last drawning / analysis
-        self.df["traded"]=np.nan
+        # self.df["bought"]=np.nan
+        # self.df["sold"]=np.nan
 
         self.logger = logging.getLogger(logger_name_high_level)
         # self.taTester = TATester(logger_name_detail)
@@ -92,7 +92,7 @@ class HQBrain:
 
     def convert_to_df_from_kline(self, msg):
         data = {
-            "dateTime": [msg['E']], 
+            "timeStamp": [msg['E']], 
             "open": [float(msg['k']['o'])], 
             "high": [float(msg['k']['h'])], 
             "low": [float(msg['k']['l'])], 
@@ -107,7 +107,8 @@ class HQBrain:
         value: list: column values
         """
         df = pd.DataFrame(data)
-        df.set_index('dateTime', drop=False, inplace=True)
+        df.set_index('timeStamp', drop=False, inplace=True)
+        df.rename(columns={"timeStamp": 'dateTime'}, inplace=True)
         df.dateTime = DateHelper.get_datetime_single_from_ms(df.dateTime)
         return df
 
@@ -124,8 +125,6 @@ class HQBrain:
             self.df = self.df.append(df)
             return True
         else:
-            # print(f"Updated: FALSE: {DateHelper.get_datetime_single_from_ms(msg['E'])} > {counted}")
-            # print(f"ping________________________ {df.loc[df.index[-1], 'dateTime']}")
             return False
 
 
@@ -214,12 +213,10 @@ def run_test_on_existind_data_from_db(args):
 
     monitor_price = False
     
-    price_watcher = PriceWatcher(data_hq, logger)
-    signal_trigger = SignalTrigger(data_hq, logger)
-
     ledger = CoinLedger(logger)
     ledger.bank = 1000
     ledger.coin_value_to_buy = 50
+    price_df = pd.DataFrame({"timeStamp": [], "bought": [], "sold":[]})
 
     from Helpers.PriceCheckSession import PriceCheckSession
     session_open = None
@@ -234,7 +231,6 @@ def run_test_on_existind_data_from_db(args):
         if data_hq.update_data_on_tick(new_df):
             # monitor_price = signal_trigger.check_rsi()
 
-
             if session_open is None:
                 # monitor_price = signal_trigger.check_bbvol() or signal_trigger.check_macd_asmode() or signal_trigger.check_rsi()
                 # monitor_price = signal_trigger.check_rsi()
@@ -243,44 +239,42 @@ def run_test_on_existind_data_from_db(args):
                 monitor_price = rsi_value < 30 or rsi_value > 70
             
             
+        # monitor price on PER TICK basis dummy!
         if monitor_price:
-            session_open = session_open if session_open is not None else PriceCheckSession(logger, data_hq.current_datetime)
+            current_time_stamp = new_df.iloc[0].name
+            tick_df = ndf[ndf.index <= current_time_stamp].tail(50)
+            current_price = tick_df.at[current_time_stamp, "close"]
             
-            if session_open.initial_trend_increasing is None:
-                # if rsi_value < 30 and ta.increasing(ta.sma(data_hq.df.close, length=21), asint=False).tail(1).values[0] == False:
-                # rsi_value
-                session_open.initial_trend_increasing = ta.increasing(ta.sma(data_hq.df.close, length=21), length=5, asint=False).tail(1).values[0]
+            if session_open is None:
+                session_open = PriceCheckSession(logger, new_df.iloc[0].dateTime)
 
-            # if session_open.initial_trend_increasing:
-            #     price_above_average = ta.tsignals(data_hq.df.close > )
 
-            # check if trend continues
-            # check if trend is increasing over last 3 values for sma length = 21
-            if len({session_open.initial_trend_increasing, ta.increasing(ta.sma(data_hq.df.close, length=9), asint=False).tail(1).values[0]}) == 1:
-                continue
-
-            else: # change of trend - ACTION TIME
-                current_time_stamp = data_hq.df.tail(1).index.values[0]
-                current_price = data_hq.df.at[current_time_stamp, "close"]
+            if rsi_value < 30:
+                if ta.decreasing(tick_df.close, length=7, asint=False).iat[-1]:
+                    continue
+                elif ledger.propose_buy(current_price, current_time_stamp):
+                    price_df.at[current_time_stamp, "bought"] = current_price
                 
+                # closing session as there might be insufficient bank state
+                session_open.session_to_close()
+                session_open = None
+                monitor_price= False
 
-                action = "sell" if session_open.initial_trend_increasing else "buy"
-
-                if action == "sell" and ledger.propose_sell(current_price, current_time_stamp):
-                    data_hq.df.at[current_time_stamp, "traded"] = current_price
-                    
-                try:
-                    if action == "buy" and ledger.propose_buy(current_price, current_time_stamp):
-                        data_hq.df.at[current_time_stamp, "traded"] = -current_price
-                except:
-                    break
-
-                # logger.info(f"{data_hq.current_datetime}: {action}, Price: {data_hq.df.tail(1).close.values[0]}{earned}")
+            if rsi_value > 70:
+                if ta.increasing(tick_df.close, length=7, asint=False).iat[-1]:
+                    continue
+                elif ledger.propose_sell(current_price, current_time_stamp):
+                    price_df.at[current_time_stamp, "sold"] = current_price
                 session_open.session_to_close()
                 session_open = None
                 monitor_price= False
         
-        last_price = data_hq.df.tail(1).close.values[0]
+    last_price = data_hq.df.tail(1).close.values[0]
+    
+    data_hq.df["sma21"] = ta.sma(data_hq.df.close, length=21)
+    data_hq.df["sma9"] = ta.sma(data_hq.df.close, length=9)
+    data_hq.df["rsi12"] = ta.rsi(data_hq.df.close, length=12)
+    data_hq.df.to_csv("test_data_output.csv")
 
     logger.info(f"The END: bank_money: {ledger.bank}, coins: {ledger.available_coins}, last price recorded: {last_price}")
     logger.info(f"Potential worth (with potential loss): {last_price*ledger.available_coins+ledger.bank}")
@@ -288,8 +282,7 @@ def run_test_on_existind_data_from_db(args):
     logger.info(f"All transactions: {len(ledger.transaction_history)}, active_transactions: {len([k for k in ledger.transaction_history if k.active])}")
     logger.info(f"All transactions: {[k.coin_value for k in ledger.transaction_history if k.active]}")
 
-    # df[df["traded"].notnull()]
-    # to plot with prices
+    Plotter.plot_data(data_hq.df, price_df)
             
 
 if __name__ == "__main__":

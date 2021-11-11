@@ -29,7 +29,7 @@ class CoinLedger:
 
         if len(matching_transactions) == 0:
             self.logger.info(f"propose_sell at {dateTime_human_utc}:{coin_sell_value} > NO MATCHING STOCK - quitting")
-            self.logger.info([k.coin_value for k in self.transaction_history])
+            # self.logger.info([k.coin_value for k in self.transaction_history])
             return False
 
         # check the % increase on each

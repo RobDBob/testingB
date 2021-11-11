@@ -23,24 +23,6 @@ def saveToFile(results, filePath):
     with open(filePath, "w") as fp:
         json.dump(results, fp)
 
-def saveToFileCSV(results, filePath):
-    """
-    Save data in TA format
-    `Timestamp`, `Open`, `High`, `Low`, `Close` and `Volume` columns.
-    """
-    import csv
-    with open(filePath, "w", newline='') as fp:
-        csvriter = csv.writer(fp, delimiter=',')
-        csvriter.writerow(["Timestamp","DateTime","Open","High","Low","Close"])
-        for record in results:
-            csvriter.writerow([
-                record["id"],
-                datetime.utcfromtimestamp((int(record["id"])/1000)+3600).strftime('%Y-%m-%d %H:%M:%S'),
-                record["openPrice"],
-                record["highPrice"],
-                record["lowPrice"],
-                record["lastPrice"]])
-
 def get_df_from_db_records(db_records):
     """
     records in database are stored with timestamp unit: sec instead of milisecs
@@ -49,7 +31,8 @@ def get_df_from_db_records(db_records):
     db_df = pd.DataFrame().from_records(db_records)
     db_df=db_df.apply(pd.to_numeric)
     db_df.columns=const.columns_to_keep
-    db_df.dateTime = db_df.dateTime * 1000
-    db_df.set_index('dateTime', inplace=True, drop=False)
+    db_df.timeStamp = db_df.timeStamp * 1000
+    db_df.set_index('timeStamp', inplace=True, drop=False)
+    db_df.rename(columns={"timeStamp": 'dateTime'}, inplace=True)
     db_df.dateTime = DateHelper.get_datetime_series(db_df.dateTime)
     return db_df
