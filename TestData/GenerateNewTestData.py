@@ -20,10 +20,10 @@ def generate_from_db(save_to_csv_filename=None, start_timestamp=0, interval="1m"
 
     raw_records = DBFunctions.get_records_after_timestamp(start_timestamp)
 
-    all_df_wo_interval = PandaFunctions.get_df_from_db_records(raw_records)
+    all_df_wo_interval = PandaFunctions.get_df_from_records(raw_records)
 
     all_records_with_interval = [k for k in raw_records if not k[0] % interval_seconds]
-    all_df_with_interval = PandaFunctions.get_df_from_db_records(all_records_with_interval)
+    all_df_with_interval = PandaFunctions.get_df_from_records(all_records_with_interval)
     # all_df_with_interval = all_df_with_interval.join(ta.rsi(all_df_with_interval["close"], length=12))
     # all_df_with_interval = all_df_with_interval.join(ta.bbands(all_df_with_interval["volume"], length=18, std=2))
     # all_df_with_interval = all_df_with_interval.join(ta.macd(all_df_with_interval["close"], signal_indicators=True, asmode=True))

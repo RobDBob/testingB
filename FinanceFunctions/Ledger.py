@@ -16,7 +16,7 @@ class CoinLedger:
     def default_purchase_quantity(self, coin_value):
         return (1/coin_value)*self.coin_value_to_buy
 
-    def propose_sell(self, coin_sell_value, time_stamp):
+    def propose_sell(self, coin_sell_value, time_stamp, forced=False):
         # check what we have purchased
         # verify price is ok
         # act and sell
@@ -33,14 +33,19 @@ class CoinLedger:
             return False
 
         # check the % increase on each
-        percent_gain = [((coin_sell_value/k.coin_value) - 1) for k in matching_transactions]
-        best_gain_index = percent_gain.index(max(percent_gain))
+        percent_gain = [((coin_sell_value-k.coin_value)/k.coin_value*100) for k in matching_transactions]
+        max_percent_gain_value = max(percent_gain)
+        best_gain_index = percent_gain.index(max_percent_gain_value)
         
-        self.logger.info(f"propose_sell: Matching len: {len(matching_transactions)}")
+        # self.logger.info(f"propose_sell: Matching len: {len(matching_transactions)}")
         closing_transaction: TradeEntryBuy = matching_transactions[best_gain_index]
 
+        if max_percent_gain_value < 0.5:
+            self.logger.info(f"FAILED PERCENT CHECK {max_percent_gain_value}, {closing_transaction.coin_value} at: {coin_sell_value}")
+            return False
+          
 
-        self.logger.info(f"________________SELL: on {dateTime_human_utc} {closing_transaction.coin_value} at: {coin_sell_value}. Gain: {100-(closing_transaction.coin_value/coin_sell_value)*100}%")
+        self.logger.info(f"________________SELL: on {dateTime_human_utc} {closing_transaction.coin_value} at: {coin_sell_value}. Gain: {max_percent_gain_value}")
         
         # previously buy, now is being closed
         
@@ -52,6 +57,9 @@ class CoinLedger:
         self.transaction_history.append(trade_entry)
         closing_transaction.active = False
         return True
+
+    # def check_buy(self):
+
 
     def propose_buy(self, coin_buy_price, time_stamp):
         dateTime_human_utc = DateHelper.get_datetime_single_from_ms(time_stamp)

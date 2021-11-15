@@ -195,94 +195,141 @@ def run_test_on_existind_data_from_db(args):
     each of feed data is converted:
     from DataFrame -> DataSeries -> Dictionary -> DataFrame because >.<
     """
-    initial_time_stamp = int(time())-72*3600
+    # initial_time_stamp = int(time())-3*3600
+    # time[s]
+    initial_time_stamp = 1636670930
+    print(f"initial time stamp: {initial_time_stamp}")
+    raw_records = DBFunctions.get_records_between_timestamps(initial_time_stamp, initial_time_stamp+14*3600)
 
-    first_hour_records = DBFunctions.get_records_between_timestamps(initial_time_stamp, initial_time_stamp+3600)
-    remaining_raw_records = DBFunctions.get_records_after_timestamp(initial_time_stamp+3600)
-
-    # get first hour records on 1min interval
-    iterval_seconds = int(helpers.interval_to_milliseconds(args.interval)/1000)
-    first_hour_records_w_interval = [k for k in first_hour_records if not k[0] % iterval_seconds]
-    print(len(first_hour_records_w_interval))
-
-    idf = PandaFunctions.get_df_from_db_records(first_hour_records_w_interval) # initial df
-    ndf = PandaFunctions.get_df_from_db_records(remaining_raw_records) # next df
+    # time [ms]
+    df = PandaFunctions.get_df_from_records(raw_records)
 
     logger = create_logger("DataTest2", "LOG_Scenario_price_check_from_db.log")
-    data_hq = HQBrain(kline_interval=args.interval, historic_data=idf, logger=logger)
-
-    monitor_price = False
     
     ledger = CoinLedger(logger)
     ledger.bank = 1000
-    ledger.coin_value_to_buy = 50
     price_df = pd.DataFrame({"timeStamp": [], "bought": [], "sold":[]})
+    df_5m = pd.DataFrame({"timeStamp": [], "close": [], "BBUpper": [], "BBLower": [], "BBMedian":[]})
+    df_5m[["timeStamp"]] = df_5m[["timeStamp"]].astype(np.int64)
+    df_bb5mL9 = None
 
     from Helpers.PriceCheckSession import PriceCheckSession
-    session_open = None
-    rsi_value = None
-
     last_price = 0
+    prep_to_sell = False
+    prep_to_buy = False
 
     # for record in remaining_records:
-    for dx in range(len(ndf)):
-        new_df = ndf.iloc[[dx]]
+    for dx in range(len(df)):
+        current_timestamp = df.iloc[dx].name
+        recent_tick_df = df[df.index <= current_timestamp].tail(202)
+        current_price = recent_tick_df.at[current_timestamp, "close"]
 
-        if data_hq.update_data_on_tick(new_df):
-            # monitor_price = signal_trigger.check_rsi()
+        recent_tick_df["sma200"] = ta.sma(recent_tick_df.close, length=200)
+        recent_tick_df["sma50"] = ta.sma(recent_tick_df.close, length=50)
 
-            if session_open is None:
-                # monitor_price = signal_trigger.check_bbvol() or signal_trigger.check_macd_asmode() or signal_trigger.check_rsi()
-                # monitor_price = signal_trigger.check_rsi()
-                rsi = ta.rsi(data_hq.df["close"], length=12)
-                rsi_value = rsi.tail(1).values[0]
-                monitor_price = rsi_value < 30 or rsi_value > 70
-            
-            
-        # monitor price on PER TICK basis dummy!
-        if monitor_price:
-            current_time_stamp = new_df.iloc[0].name
-            tick_df = ndf[ndf.index <= current_time_stamp].tail(50)
-            current_price = tick_df.at[current_time_stamp, "close"]
-            
-            if session_open is None:
-                session_open = PriceCheckSession(logger, new_df.iloc[0].dateTime)
-
-
-            if rsi_value < 30:
-                if ta.decreasing(tick_df.close, length=7, asint=False).iat[-1]:
+        if (current_timestamp % 300000) == 0:
+            # ensure added records are on or after 15min mark
+            if len(df_5m) > 0:
+                previous_timestamp = df_5m.tail(1).timeStamp
+                if current_timestamp < int(previous_timestamp) + 300000:
                     continue
-                elif ledger.propose_buy(current_price, current_time_stamp):
-                    price_df.at[current_time_stamp, "bought"] = current_price
-                
-                # closing session as there might be insufficient bank state
-                session_open.session_to_close()
-                session_open = None
-                monitor_price= False
-
-            if rsi_value > 70:
-                if ta.increasing(tick_df.close, length=7, asint=False).iat[-1]:
-                    continue
-                elif ledger.propose_sell(current_price, current_time_stamp):
-                    price_df.at[current_time_stamp, "sold"] = current_price
-                session_open.session_to_close()
-                session_open = None
-                monitor_price= False
+            
+            # cast timestamp to str to prevent auto type assigment to float
+            df_5m = df_5m.append({"timeStamp": str(current_timestamp), "close": current_price}, ignore_index=True)
+            df_bb5mL9 = ta.bbands(df_5m.close, length=9)
+            
+            if df_bb5mL9 is not None:
+                df_5m["BBUpper"] = df_bb5mL9["BBU_9_2.0"]
+                df_5m["BBLower"] = df_bb5mL9["BBL_9_2.0"]
+                df_5m["BBMedian"] = df_bb5mL9["BBM_9_2.0"]
         
-    last_price = data_hq.df.tail(1).close.values[0]
-    
-    data_hq.df["sma21"] = ta.sma(data_hq.df.close, length=21)
-    data_hq.df["sma9"] = ta.sma(data_hq.df.close, length=9)
-    data_hq.df["rsi12"] = ta.rsi(data_hq.df.close, length=12)
-    data_hq.df.to_csv("test_data_output.csv")
+        if df_bb5mL9 is None or np.any(np.isnan(df_bb5mL9.tail(1))):
+            continue
+        # if pd.isnull(recent_tick_df.at[current_timestamp, "sma200"]):
+        #     continue
 
-    logger.info(f"The END: bank_money: {ledger.bank}, coins: {ledger.available_coins}, last price recorded: {last_price}")
-    logger.info(f"Potential worth (with potential loss): {last_price*ledger.available_coins+ledger.bank}")
+        rsi9 = ta.rsi(recent_tick_df.close, 9)
+        # sma9 = ta.sma(recent_tick_df.close, 9)
+
+        current_price_below_sma200 =  recent_tick_df.at[current_timestamp, "close"] < recent_tick_df.at[current_timestamp, "sma200"]
+        current_price_above_sma200 =  recent_tick_df.at[current_timestamp, "close"] > recent_tick_df.at[current_timestamp, "sma200"]
+        current_price_below_sma50 =  recent_tick_df.at[current_timestamp, "close"] < recent_tick_df.at[current_timestamp, "sma50"]
+        current_price_above_sma50 =  recent_tick_df.at[current_timestamp, "close"] > recent_tick_df.at[current_timestamp, "sma50"]
+
+        if current_price_below_sma200 and current_price_below_sma50:
+            if rsi9.iat[-1] < 5:
+                if ledger.propose_buy(current_price, current_timestamp):
+                    price_df = price_df.append({"timeStamp": current_timestamp, "bought": current_price}, ignore_index=True)
+                    continue
+
+            if rsi9.iat[-1] < 30:
+                prep_to_buy = True
+            elif prep_to_buy and ta.decreasing(recent_tick_df.close, length=3, asint=False).iat[-1]:
+                pass
+            elif prep_to_buy and current_price_below_sma200:
+                if ledger.propose_buy(current_price, current_timestamp):
+                    price_df = price_df.append({"timeStamp": current_timestamp, "bought": current_price}, ignore_index=True)
+                    prep_to_buy = False
+        
+        if current_price_above_sma200 and current_price_above_sma50:
+            if rsi9.iat[-1] > 95:
+                if ledger.propose_sell(current_price, current_timestamp):
+                    price_df = price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
+                    continue
+
+            if rsi9.iat[-1] > 70:
+                prep_to_sell = True
+            elif prep_to_sell and ta.increasing(recent_tick_df.close, length=3, asint=False).iat[-1]:
+                pass
+            elif prep_to_sell:
+                if ledger.propose_sell(current_price, current_timestamp):
+                    prep_to_sell = False
+                    price_df = price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
+            
+        
+    # last_price = data_hq.df.tail(1).close.values[0]
+
+    last_price = recent_tick_df.tail(1).close.values[0]
+    df["sma9"] = ta.sma(df.close, length=9)
+    df["sma50"] = ta.sma(df.close, length=50)
+    df["sma200"] = ta.sma(df.close, length=200)
+    df["decSMA50"] = ta.decreasing(df["sma50"], length=3, asint=False)
+    df.to_csv("test_data_output.csv")
+    price_df.to_csv("test_data_trades.csv")
+    price_df.to_pickle("price.pkl")
+
+    logger.info(f"The END: bank_money: {ledger.bank}, coins: {ledger.available_coins}")
+    logger.info(f"With sold stock at most recent price ({last_price}): {last_price*ledger.available_coins+ledger.bank}")
     logger.info(f"Actual worth (without loss): {ledger.sum_of_active_transactions()+ledger.bank}")
     logger.info(f"All transactions: {len(ledger.transaction_history)}, active_transactions: {len([k for k in ledger.transaction_history if k.active])}")
-    logger.info(f"All transactions: {[k.coin_value for k in ledger.transaction_history if k.active]}")
+    logger.info(f"All open transactions: {[k.coin_value for k in ledger.transaction_history if k.active]}")
 
-    Plotter.plot_data(data_hq.df, price_df)
+    # Plotter.plot_data(df, price_df)
+    # df.reset_index(inplace=True)
+    df.to_pickle("pickle.pkl")
+    df_5m["timeStamp"] = df_5m[["timeStamp"]].astype(np.int64)
+    df_5m.set_index("timeStamp", inplace=True)
+    df_5m.to_pickle("df_5m.pkl")
+    print(df.tail(10))
+    print(df_5m.tail(10))
+
+    mx=df.plot(y="close", c="orange")
+    df.plot(y="sma50", c="green", ax=mx)
+    df.plot(y="sma200", c="fuchsia", ax=mx)
+    df_5m.plot(y="BBUpper", c="black", ax=mx)
+    df_5m.plot(y="BBLower", c="black", ax=mx)
+    df_5m.plot(y="BBMedian", c="black", ax=mx)
+    ax=price_df.plot.scatter(x="timeStamp", y="bought", c="red", ax=mx)
+    for i, txt in enumerate(price_df.bought):
+        ax.annotate(txt, (price_df.timeStamp.iat[i], price_df.bought.iat[i]))
+
+    bx=price_df.plot.scatter(x="timeStamp", y="sold", c="green", ax=mx)
+    for i, txt in enumerate(price_df.sold):
+        bx.annotate(txt, (price_df.timeStamp.iat[i], price_df.sold.iat[i]))
+    
+    import matplotlib.pyplot as plt
+    plt.show()
+
             
 
 if __name__ == "__main__":

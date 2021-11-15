@@ -45,9 +45,9 @@ class TradeEntrySell(TradeEntryBase):
     def __init__(self, trade_fee, transaction_time, coin_value, buy_trade_entry: TradeEntryBuy):
         
         # if sell action, this will link buy transaction
-        self.linked_id = buy_trade_entry.id
-
         super().__init__(trade_fee, transaction_time, buy_trade_entry.quantity, coin_value, TransactionType.sell)
+        self.linked_id = buy_trade_entry.id
+        self.active = False
     
     @property
     def transaction_gain(self):
