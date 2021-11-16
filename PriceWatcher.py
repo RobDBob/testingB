@@ -1,6 +1,4 @@
-from MathFunctions.TATesting import TATester
 import pandas_ta as ta
-from GetLogger import create_logger
 from Helpers import const
 
 class PriceWatcher:

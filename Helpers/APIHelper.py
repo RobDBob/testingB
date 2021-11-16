@@ -1,9 +1,14 @@
 from Helpers.PandaFunctions import convert_to_numeric
 from datetime import datetime, timedelta
 import pandas as pd
-import json
 from Helpers import const
 from time import time
+from binance import ThreadedWebsocketManager
+from binanceHelper.bFinanceAPIFunctions import getClient
+import pandas as pd
+
+from datetime import datetime
+from Helpers import const, APIHelper
 
 def get_account(client):
     """
@@ -33,3 +38,18 @@ def get_historical_data(client, symbol, timeWindowMinutes, kline_interval):
     
     return df
 
+
+def start_web_socket(args):
+    """
+    Run program of initial data grab & websocket
+    """
+    client = getClient(test_net=args.test_net)
+    historic_data = APIHelper.get_historical_data(client, args.symbol, timeWindowMinutes=60, kline_interval=args.interval)
+    ## data_updater = HQBrain(kline_interval=args.interval, historic_data=historic_data)
+    callback = None
+
+    twm = ThreadedWebsocketManager(testnet=args.test_net)
+    twm.daemon = True
+    twm.start()
+    twm.start_kline_socket(callback=callback, symbol=args.symbol) # data_updater.do_stuff_with_klline, symbol=args.symbol)
+    twm.join(timeout=args.timeout)

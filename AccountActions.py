@@ -1,6 +1,6 @@
 from time import time
 import argparse
-from Playground.bFinanceAPIFunctions import getClient
+from binanceHelper.bFinanceAPIFunctions import getClient
 import pprint
 
 

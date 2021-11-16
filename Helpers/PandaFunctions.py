@@ -59,3 +59,14 @@ def update_bb_on_15min_mark(df, current_timestamp, current_price):
         df["BBLower"] = df_bb15mL9["BBL_9_2.0"]
         df["BBMedian"] = df_bb15mL9["BBM_9_2.0"]
     return df
+
+# def bb_trend_slowing_decrease_trend(df_bblower):
+#     """
+#     period 5 appears to be stable
+#     """
+#     previous_value = df_bblower.pct_change(periods=5).tail(2).values[0]
+#     current_value = df_bblower.pct_change(periods=5).tail(2).values[1]
+#     if previous_value > previous_value:
+#         return False
+#     return current_value < 0 and (abs(current_value) > 0 and abs(current_value) < 0.0002)
+#     current_value = df_bblower.pct_change(periods=5).tail(2).values[1]

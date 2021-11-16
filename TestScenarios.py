@@ -1,4 +1,4 @@
-from MathFunctions.TATesting import TATester
+from TAAnalysis.TATesting import TATester
 import pandas_ta as ta
 from GetLogger import create_logger
 from Helpers import const

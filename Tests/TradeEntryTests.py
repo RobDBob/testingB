@@ -50,7 +50,7 @@ class TestTradeEntry(unittest.TestCase):
             trade_fee=trade_fee, 
             transaction_time=sell_transaction_time, 
             coin_value=sell_coin_value, 
-            buy_trade_entry=buy_trade_entry)
+            buy_trade_entries=buy_trade_entry)
 
         expected_transaction_gain = buy_trade_entry.quantity * sell_trade_entry.coin_value
         expected_transaction_gain -= (expected_transaction_gain*trade_fee)/100

@@ -42,11 +42,13 @@ class TradeEntryBuy(TradeEntryBase):
         return None
 
 class TradeEntrySell(TradeEntryBase):
-    def __init__(self, trade_fee, transaction_time, coin_value, buy_trade_entry: TradeEntryBuy):
+    def __init__(self, trade_fee, transaction_time, coin_value, buy_trade_entries):
+
+        overall_quantity = sum([k.quantity for k in buy_trade_entries])
         
         # if sell action, this will link buy transaction
-        super().__init__(trade_fee, transaction_time, buy_trade_entry.quantity, coin_value, TransactionType.sell)
-        self.linked_id = buy_trade_entry.id
+        super().__init__(trade_fee, transaction_time, overall_quantity, coin_value, TransactionType.sell)
+        self.linked_ids = [k.id for k in buy_trade_entries]
         self.active = False
     
     @property
