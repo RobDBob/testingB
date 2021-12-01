@@ -7,13 +7,12 @@ import pandas as pd
 
 from time import time
 from datetime import datetime
-import TestScenarios
 from FinanceFunctions.Ledger import CoinLedger
 from TAAnalysis.TATesting import TATester
 from Helpers import const, DateHelper, PandaFunctions, DBFunctions , Plotter
 from PriceWatcher import PriceWatcher
 from SignalTrigger import SignalTrigger
-from GetLogger import create_logger
+from Helpers.GetLogger import create_logger
 
 # logger_name_detail = "WebSocketPriceUpdaterTester_detail"
 # create_logger(logger_name_detail, "LOG_TestRecords_detail.log")
@@ -82,11 +81,11 @@ class HQBrain:
 
     def buy(self):
         last_loc = self.df.index[-1]
-        self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: BUY at: {self.df.loc[last_loc, 'close']} ")
+        self.logger.info(f"{current_timestamp}:{self.df.loc[last_loc, 'dateTime']}: BUY at: {self.df.loc[last_loc, 'close']} ")
 
     def sell(self):
         last_loc = self.df.index[-1]
-        self.logger.info(f"{self.df.loc[last_loc, 'dateTime']}: SELL at: {self.df.loc[last_loc, 'close']} ")
+        self.logger.info(f"{current_timestamp}:{self.df.loc[last_loc, 'dateTime']}: SELL at: {self.df.loc[last_loc, 'close']} ")
 
     def convert_to_df_from_kline(self, msg):
         data = {
@@ -137,11 +136,11 @@ def run_test_on_existind_data_from_db(args):
     bb45_pct_sample_count = 2
     sma200_pct_sample_count = 2
 
-    # initial_time_stamp = int(time())-3*3600
+    initial_time_stamp = int(time())-5*24*3600
     # time[s]
-    initial_time_stamp = 1636670930-3*3600
+    # initial_time_stamp = 1636670930-3*3600
     print(f"initial time stamp: {initial_time_stamp}")
-    raw_records = DBFunctions.get_records_between_timestamps(initial_time_stamp, initial_time_stamp+14*3600)
+    raw_records = DBFunctions.get_records_between_timestamps(initial_time_stamp, initial_time_stamp+6*3600)
 
     # time [ms]
     df = PandaFunctions.get_df_from_records(raw_records)
@@ -155,160 +154,147 @@ def run_test_on_existind_data_from_db(args):
     trade_price_df = pd.DataFrame({"timeStamp": [], "bought": [], "sold":[]})
     
     # df_5m[["timeStamp"]] = df_5m[["timeStamp"]].astype(np.int64)
-    df_bb5mL9 = None
     
-    bb_df_1min = pd.DataFrame({"timeStamp": [], "close": [], "BBUpper": [], "BBLower": [], "BBMedian":[]})
-    df_1min = pd.DataFrame({"timeStamp": [], "close": []})
+    # bb_df_1min = pd.DataFrame({"timeStamp": [], "close": [], "high": [], "low": [], UpperBand: [], LowerBand: [], MedianBand:[]})
+
+    MedianBand = "KCBs_45_3.0"
+    LowerBand = "KCLs_45_3.0"
+    UpperBand = "KCUs_45_3.0"
 
     from Helpers.PriceCheckSession import PriceCheckSession
     last_price = 0
-    step5min_ms = 300000
     step1min_ms = 60000
+
+    print(f"preset start {DateHelper.get_datetime_single_from_ms(time()*1000)}")
+
+    df["sma50"] = ta.sma(df.close, length=50)
+    df["sma200"] = ta.sma(df.close, length=200)
+    tick_df_1sec = df
+
+    # when not using dripping from websocket
+    bb_df_1min=pd.DataFrame([df.loc[k] for k in df.index if k % 60000 == 0])
+    bb_df_1min = bb_df_1min.join(ta.kc(bb_df_1min["high"], bb_df_1min["low"], bb_df_1min["close"], length=45, scalar=3, tr=True, mamode="sma"))
+
+    long_sma_trend = ta.decreasing()
+
+    print(f"preset done: {DateHelper.get_datetime_single_from_ms(time()*1000)}")
 
     # for record in remaining_records:
     for dx in range(len(df)):
         current_timestamp = df.iloc[dx].name
-        tick_df_1sec = df[df.index <= current_timestamp].tail(202)
+        # tick_df_1sec = df[df.index <= current_timestamp].tail(202)
         current_price = tick_df_1sec.at[current_timestamp, "close"]
 
-        tick_df_1sec["sma50"] = ta.sma(tick_df_1sec.close, length=50)
-        tick_df_1sec["sma200"] = ta.sma(tick_df_1sec.close, length=200)
+        # NEEDED FOR WEB SOCKET DRIP
+        # tick_df_1sec["sma50"] = ta.sma(tick_df_1sec.close, length=50)
+        # tick_df_1sec["sma200"] = ta.sma(tick_df_1sec.close, length=200)
 
-        # PRICE DATA FRAME
-        if (current_timestamp % step1min_ms) == 0:
-            # ensure added records are on or after 15min mark
-            df_1min = df_1min.append({"timeStamp": str(current_timestamp), "close": current_price}, ignore_index=True)
-
-        # BBANDS DATA FRAME
-        if (current_timestamp % step1min_ms) == 0:
-            # ensure added records are on or after 15min mark
-            if len(bb_df_1min) > 0:
-                previous_timestamp = bb_df_1min.tail(1).timeStamp
-                if current_timestamp < int(previous_timestamp) + step5min_ms:
-                    continue
+        # # BBANDS DATA FRAME
+        # if (current_timestamp % step1min_ms) == 0:
+        #     # ensure added records are on or after 15min mark
+        #     if len(bb_df_1min) > 0:
+        #         previous_timestamp = bb_df_1min.tail(1).timeStamp
             
-            # cast timestamp to str to prevent auto type assigment to float
-            bb_df_1min = bb_df_1min.append({"timeStamp": str(current_timestamp), "close": current_price}, ignore_index=True)
-            df_bb5mL9 = ta.bbands(bb_df_1min.close, length=45)
+        #     # cast timestamp to str to prevent auto type assigment to float
+        #     bb_df_1min = bb_df_1min.append({
+        #         "timeStamp": str(current_timestamp), 
+        #         "close": current_price, 
+        #         "high": tick_df_1sec.at[current_timestamp, "high"],
+        #         "low": tick_df_1sec.at[current_timestamp, "low"]},
+        #           ignore_index=True)
+        #     df_bb5mL45 = ta.kc(bb_df_1min["high"], bb_df_1min["low"], bb_df_1min["close"], length=45, tr=True, mamode="sma") #bbands(bb_df_1min.close, length=45)
             
-            if df_bb5mL9 is not None:
-                bb_df_1min["BBUpper"] = df_bb5mL9["BBU_45_2.0"]
-                bb_df_1min["BBLower"] = df_bb5mL9["BBL_45_2.0"]
-                bb_df_1min["BBMedian"] = df_bb5mL9["BBM_45_2.0"]
-                bb_df_1min["BBUpperPct1"] = bb_df_1min["BBUpper"].pct_change(periods=1)
-                bb_df_1min["BBLowerPct1"] = bb_df_1min["BBLower"].pct_change(periods=1)
+        #     if df_bb5mL45 is not None:
+        #         # print(df_bb5mL45.tail(1))
+        #         bb_df_1min[UpperBand] = df_bb5mL45["KCUs_45_2"]
+        #         bb_df_1min[LowerBand] = df_bb5mL45["KCLs_45_2"]
+        #         bb_df_1min[MedianBand] = df_bb5mL45["KCBs_45_2"]
+        #         bb_df_1min["UpperBandPct1"] = bb_df_1min[UpperBand].pct_change(periods=1)
+        #         bb_df_1min["LowerBandPct1"] = bb_df_1min[LowerBand].pct_change(periods=1)
         
-        if df_bb5mL9 is None or np.any(np.isnan(df_bb5mL9.tail(1))) or len(bb_df_1min) < 3:
-            continue
+        # if df_bb5mL45 is None or np.any(np.isnan(df_bb5mL45.tail(1))) or len(bb_df_1min) < 3:
+        #     continue
+
         # if pd.isnull(recent_tick_df.at[current_timestamp, "sma200"]):
         #     continue
 
-        # rsi9 = ta.rsi(recent_tick_df.close, 9)
-        price_below_bb_median = tick_df_1sec.at[current_timestamp, "close"] < bb_df_1min["BBMedian"].tail(1).values[0]
-        price_above_bb_median = tick_df_1sec.at[current_timestamp, "close"] > bb_df_1min["BBMedian"].tail(1).values[0]
-        price_above_bb_lower = tick_df_1sec.at[current_timestamp, "close"] > bb_df_1min["BBLower"].tail(1).values[0]
-        price_below_bb_lower = tick_df_1sec.at[current_timestamp, "close"] < bb_df_1min["BBLower"].tail(1).values[0]
-        price_above_bb_upper = tick_df_1sec.at[current_timestamp, "close"] > bb_df_1min["BBUpper"].tail(1).values[0]
-        price_below_bb_upper = tick_df_1sec.at[current_timestamp, "close"] < bb_df_1min["BBUpper"].tail(1).values[0]
-
-        bb_lower_trend_slowing_decrease_trend_pct = bb_df_1min["BBLower"].pct_change(periods=bb45_pct_sample_count).tail(1).values[0]
-        bb_upper_trend_slowing_increase_trend_pct = bb_df_1min["BBUpper"].pct_change(periods=bb45_pct_sample_count).tail(1).values[0]
+        # print(bb_df_1min)
+        price_below_bb_median = tick_df_1sec.at[current_timestamp, "close"] < bb_df_1min[MedianBand].tail(1).values[0]
+        price_above_bb_median = tick_df_1sec.at[current_timestamp, "close"] > bb_df_1min[MedianBand].tail(1).values[0]
+        price_above_bb_lower = tick_df_1sec.at[current_timestamp, "close"] > bb_df_1min[LowerBand].tail(1).values[0]
+        price_below_bb_lower = tick_df_1sec.at[current_timestamp, "close"] < bb_df_1min[LowerBand].tail(1).values[0]
+        price_above_bb_upper = tick_df_1sec.at[current_timestamp, "close"] > bb_df_1min[UpperBand].tail(1).values[0]
+        price_below_bb_upper = tick_df_1sec.at[current_timestamp, "close"] < bb_df_1min[UpperBand].tail(1).values[0]
 
         price_below_sma50 =  tick_df_1sec.at[current_timestamp, "close"] < tick_df_1sec.at[current_timestamp, "sma50"]
         price_above_sma50 =  tick_df_1sec.at[current_timestamp, "close"] > tick_df_1sec.at[current_timestamp, "sma50"]
         price_below_sma200 =  tick_df_1sec.at[current_timestamp, "close"] < tick_df_1sec.at[current_timestamp, "sma200"]
         price_above_sma200 =  tick_df_1sec.at[current_timestamp, "close"] > tick_df_1sec.at[current_timestamp, "sma200"]
 
+        bb_lower_trend_slowing_decrease_trend_pct = bb_df_1min[LowerBand].pct_change(periods=bb45_pct_sample_count).tail(1).values[0] * 1000
+        bb_upper_trend_slowing_increase_trend_pct = bb_df_1min[UpperBand].pct_change(periods=bb45_pct_sample_count).tail(1).values[0] * 1000
         sma200_trend_trend_pct_1sec = tick_df_1sec["sma200"].pct_change(periods=sma200_pct_sample_count).tail(1).values[0] * 1000
 
 
+
+
         if np.isnan(bb_lower_trend_slowing_decrease_trend_pct) or np.isnan(bb_upper_trend_slowing_increase_trend_pct):
+            scenario_logger.info("Skipping as no bb_lower_trend_slowing_decrease_trend_pct or bb_upper_trend_slowing_increase_trend_pct available")
             continue
 
+
         if price_below_bb_median:
+            human_date = DateHelper.get_datetime_single_from_ms(current_timestamp)
+            if price_below_bb_lower:
+                if ledger.propose_buy(current_price, current_timestamp):
+                    scenario_logger.info(f"{current_timestamp}:{human_date}: B: below lower: {current_price:1.2f}. sma200: {sma200_trend_trend_pct_1sec}, bb45_lower: {bb_lower_trend_slowing_decrease_trend_pct}")
+                    trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "bought": current_price}, ignore_index=True)
+                    continue
+
 
             # trend is increasing- skip all
             if sma200_trend_trend_pct_1sec > 0 :
                 continue
             
             # price between median and lower: check for bb 
-            if price_above_bb_lower and bb_lower_trend_slowing_decrease_trend_pct < 0 and abs(bb_lower_trend_slowing_decrease_trend_pct) > 0.0005:
-                scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}, bb: {bb_lower_trend_slowing_decrease_trend_pct}")
+            if bb_lower_trend_slowing_decrease_trend_pct < 0 and abs(bb_lower_trend_slowing_decrease_trend_pct) > 0.5:
                 #trend decreasing  at high velocity
                 continue
 
             # trend is decreasing, so wait for a better price
             if sma200_trend_trend_pct_1sec < 0 and abs(sma200_trend_trend_pct_1sec) > 0.02:
                 continue
-            else:
-                scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}, sma200: {sma200_trend_trend_pct_1sec}")
-
             
-            
-            if price_below_bb_lower:
-                if ledger.propose_buy(current_price, current_timestamp):
-                    scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}: Bought below lower")
-                    trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "bought": current_price}, ignore_index=True)
-                    continue
-            # else:
-            #     if ledger.propose_buy(current_price, current_timestamp):
-            #         scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}: Bought above lower")
-            #         trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "bought": current_price}, ignore_index=True)
-            #         continue
 
-
-
-
-            # if rsi9.iat[-1] < 30:
-            #     prep_to_buy = True
-            # elif prep_to_buy and ta.decreasing(recent_tick_df.close, length=3, asint=False).iat[-1]:
-            #     pass
-            # elif prep_to_buy and price_below_sma50:
-            #     if ledger.propose_buy(current_price, current_timestamp):
-            #         trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "bought": current_price}, ignore_index=True)
-            #         prep_to_buy = False
-        
+        # BUY
         if price_above_bb_median:
+            human_date = DateHelper.get_datetime_single_from_ms(current_timestamp)
             # trend is decreasing - skip all
 
             if price_above_bb_upper:
                 if ledger.propose_sell(current_price, current_timestamp, pct=1):
-                    scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}: Sold above Upper")
+                    scenario_logger.info(f"{current_timestamp}:{human_date}: S: above Upper: {current_price:1.2f} sma200: {sma200_trend_trend_pct_1sec}, bb_upper: {bb_upper_trend_slowing_increase_trend_pct}")
                     trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
                     continue
                 
             if sma200_trend_trend_pct_1sec < 0 :
+                # scenario_logger.info(f"{current_timestamp}:{human_date}: S: above Upper: {current_price:1.2f}. sma200: {sma200_trend_trend_pct_1sec}, bb_upper: {bb_upper_trend_slowing_increase_trend_pct}")
                 continue
 
-            if price_below_bb_upper and bb_upper_trend_slowing_increase_trend_pct > 0 and abs(bb_upper_trend_slowing_increase_trend_pct) > 0.0005:
+            if bb_upper_trend_slowing_increase_trend_pct > 0.5:
                 #trend increasing  at high velocity
+                scenario_logger.info(f"{current_timestamp}:{human_date}: SKIP BB (above median): {current_price:1.2f} bb_upper: {bb_upper_trend_slowing_increase_trend_pct}")
                 continue
             
-            if sma200_trend_trend_pct_1sec > 0.03:
+            if sma200_trend_trend_pct_1sec > 0.02:
+                scenario_logger.info(f"{current_timestamp}:{human_date}: SKIP SMA (above median): {current_price:1.2f} sma200 {sma200_trend_trend_pct_1sec}")
                 continue
 
-            if price_above_bb_upper:
-                if ledger.propose_sell(current_price, current_timestamp):
-                    scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}: Sold above Upper")
-                    trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
-                    continue
-            # else:
-            #     if ledger.propose_sell(current_price, current_timestamp):
-            #         scenario_logger.info(f"{DateHelper.get_datetime_single_from_ms(current_timestamp)}: Sold below Upper")
-            #         trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
-            #         continue
+            if ledger.propose_sell(current_price, current_timestamp):
+                scenario_logger.info(f"{current_timestamp}:{human_date}: S: below Upper: {current_price:1.2f} sma200: {sma200_trend_trend_pct_1sec}, bb_upper: {bb_upper_trend_slowing_increase_trend_pct}")
+                trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
+                continue
 
-
-
-
-            # if rsi9.iat[-1] > 70:
-            #     prep_to_sell = True
-            # elif prep_to_sell and ta.increasing(recent_tick_df.close, length=3, asint=False).iat[-1]:
-            #     pass
-            # elif prep_to_sell and price_above_sma50:
-            #     if ledger.propose_sell(current_price, current_timestamp):
-            #         prep_to_sell = False
-            #         trade_price_df = trade_price_df.append({"timeStamp": current_timestamp, "sold": current_price}, ignore_index=True)
             
         
     # last_price = data_hq.df.tail(1).close.values[0]
@@ -319,8 +305,6 @@ def run_test_on_existind_data_from_db(args):
     df.to_csv("test_data_output.csv")
     trade_price_df.to_csv("csv_test_data_trades.csv")
     trade_price_df.to_pickle("pikle_price.pkl")
-    df_bb5mL9.to_pickle("pikle_df_bb5mL9.pkl")
-    
 
     scenario_logger.info(f"The END: bank_money: {ledger.bank}, coins: {ledger.available_coins}")
     scenario_logger.info(f"With sold stock at most recent price ({last_price}): {last_price*ledger.available_coins+ledger.bank}")
@@ -331,22 +315,15 @@ def run_test_on_existind_data_from_db(args):
     # Plotter.plot_data(df, price_df)
     # df.reset_index(inplace=True)
     df.to_pickle("pickle.pkl")
-    bb_df_1min["timeStamp"] = bb_df_1min[["timeStamp"]].astype(np.int64)
-    # df_5m["date"] = DateHelper.get_datetime_series(df_5m.timeStamp)
-    bb_df_1min.set_index("timeStamp", inplace=True)
-    bb_df_1min.to_pickle("df_5m.pkl")
-    df_1min["timeStamp"] = df_1min[["timeStamp"]].astype(np.int64)
-    df_1min.set_index("timeStamp", inplace=True)
-    df_1min.to_pickle("pikle_df_coin_price_1min.pkl")
+    bb_df_1min.to_pickle("df_1m.pkl")
 
     mx=df.plot(y="close", c="orange")
-    df.plot(y="sma50", c="green", ax=mx)
-    df.plot(y="sma200", c="darkblue", ax=mx)
+    # df.plot(y="sma50", c="green", ax=mx)
+    df.plot(y="sma200", c="red", ax=mx)
     
-    df_1min.plot(y="close", c="red", ax=mx)
-    bb_df_1min.plot(y="BBUpper", c="black", ax=mx)
-    bb_df_1min.plot(y="BBLower", c="black", ax=mx)
-    bb_df_1min.plot(y="BBMedian", c="black", ax=mx)
+    bb_df_1min.plot(y=UpperBand, c="black", ax=mx)
+    bb_df_1min.plot(y=LowerBand, c="black", ax=mx)
+    bb_df_1min.plot(y=MedianBand, c="black", ax=mx)
     ax=trade_price_df.plot.scatter(x="timeStamp", y="bought", c="red", ax=mx)
     for i, txt in enumerate(trade_price_df.bought):
         ax.annotate(txt, (trade_price_df.timeStamp.iat[i], trade_price_df.bought.iat[i]))

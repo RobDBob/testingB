@@ -1,6 +1,8 @@
 import psycopg2
-import time
 from Helpers.DateHelper import get_datetime_single_from_ms
+from Helpers.GetLogger import create_logger
+
+logger = create_logger(__name__, "LOG_DBFunctions.log")
 
 config = {"host":"192.168.1.34",
         "port":5555,
@@ -13,18 +15,27 @@ def execute_query(sql, fetch=False, callback=None):
     try:
         conn = psycopg2.connect(**config)
         with conn:
-            with conn.cursor() as curs:
-                curs.execute(sql)
-                conn.commit()
-                if fetch:
-                    # callback with 100 rows at the time
-                    if callback:
-                        callback(iter_row(curs, 100))
-                    else:
-                        return curs.fetchall()
+
+            try:
+                with conn.cursor() as curs:
+                    curs.execute(sql)
+                    conn.commit()
+                    if fetch:
+                        # callback with 100 rows at the time
+                        if callback:
+                            callback(iter_row(curs, 100))
+                        else:
+                            return curs.fetchall()
+    
+            except psycopg2.errors.InFailedSqlTransaction:
+                logger.error(f"Rollback transaction: {sql}")
+                with conn:
+                    with conn.cursor() as curs:
+                        curs.execute("ROLLBACK")
+                        conn.commit()
 
     except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
+        logger.error(error)
 
     finally:
         if conn is not None:
@@ -55,10 +66,10 @@ def get_all_after_first_hour_records(first_record=None):
     timestamp = first_record[0]+3600
     return get_records_after_timestamp(timestamp)
 
-def get_records_between_timestamps(from_timestamp, to_timestamp):
-    sql_select_records_between = f'select * from "bpricesBTCUSDT" bb where bb."timestamp"  > {from_timestamp} and bb."timestamp" < {to_timestamp};'
+def get_records_between_timestamps(from_timestamp_s, to_timestamp_s):
+    sql_select_records_between = f'select * from "bpricesBTCUSDT" bb where bb."timestamp"  > {from_timestamp_s} and bb."timestamp" < {to_timestamp_s};'
     query_result = execute_query(sql_select_records_between, fetch=True)
-    print(f"get_records_between_timestamps {get_datetime_single_from_ms(from_timestamp*1000)} - {get_datetime_single_from_ms(to_timestamp*1000)} count: {len(query_result)}")
+    print(f"get_records_between_timestamps {get_datetime_single_from_ms(from_timestamp_s*1000)} - {get_datetime_single_from_ms(to_timestamp_s*1000)} count: {len(query_result)}")
     return query_result
 
 def get_records_after_timestamp(timestamp):

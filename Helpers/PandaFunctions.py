@@ -32,7 +32,7 @@ def get_df_from_records(db_records):
     db_df = pd.DataFrame().from_records(db_records)
     db_df=db_df.apply(pd.to_numeric)
     db_df.columns=const.columns_to_keep
-    db_df.drop(["open", "high", "low"], axis=1, inplace=True)
+    # db_df.drop(["open", "high", "low"], axis=1, inplace=True)
     
     # keeping df data in ms unit as that's what binance is working of
     db_df.timeStamp = db_df.timeStamp * 1000
