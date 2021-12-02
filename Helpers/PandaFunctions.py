@@ -24,23 +24,24 @@ def saveToFile(results, filePath):
     with open(filePath, "w") as fp:
         json.dump(results, fp)
 
-def get_df_from_records(db_records):
+def get_df_from_records(db_records, columns=const.columns_to_keep, setIndex=False):
     """
     records in database are stored with timestamp unit: sec instead of milisecs
     need to conver secs to milisecs hence *1000
     """
     db_df = pd.DataFrame().from_records(db_records)
     db_df=db_df.apply(pd.to_numeric)
-    db_df.columns=const.columns_to_keep
+    db_df.columns=columns
     # db_df.drop(["open", "high", "low"], axis=1, inplace=True)
     
     # keeping df data in ms unit as that's what binance is working of
     db_df.timeStamp = db_df.timeStamp * 1000
 
     # db_df["dateTime"] = DateHelper.get_datetime_series(db_df.timeStamp)
-    db_df.set_index('timeStamp', inplace=True, drop=False)
-    db_df.rename(columns={"timeStamp": 'dateTime'}, inplace=True)
-    db_df.dateTime = DateHelper.get_datetime_series(db_df.dateTime)
+    if setIndex:
+        db_df.set_index('timeStamp', inplace=True, drop=False)
+        db_df.rename(columns={"timeStamp": 'dateTime'}, inplace=True)
+        db_df.dateTime = DateHelper.get_datetime_series(db_df.dateTime)
     return db_df
 
 def update_bb_on_15min_mark(df, current_timestamp, current_price):

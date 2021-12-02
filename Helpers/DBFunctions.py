@@ -72,11 +72,11 @@ def get_records_between_timestamps(from_timestamp_s, to_timestamp_s):
     print(f"get_records_between_timestamps {get_datetime_single_from_ms(from_timestamp_s*1000)} - {get_datetime_single_from_ms(to_timestamp_s*1000)} count: {len(query_result)}")
     return query_result
 
-def get_records_after_timestamp(timestamp):
+def get_records_after_timestamp(timestamp, tableName="bpricesBTCUSDT"):
     """
     timestamp: epoch secs
     """
-    sql_select_records_after = 'select * from "bpricesBTCUSDT" bb where bb."timestamp"  >= {0};'
+    sql_select_records_after = f'select * from "{tableName}" bb where bb."timestamp"  >= {0};'
     query_result = execute_query(sql_select_records_after.format(timestamp), fetch=True)
     print(f"get_records_after_timestamp, timestamp: {get_datetime_single_from_ms(timestamp*1000)}; record count: {len(query_result)}")
     return query_result

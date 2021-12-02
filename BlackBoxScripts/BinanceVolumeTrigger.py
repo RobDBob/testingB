@@ -2,6 +2,7 @@ from binance import ThreadedWebsocketManager
 import logging
 import http.client, urllib
 import pandas as pd
+from time import time
 
 def create_logger(logger_name, file_name=None):
     logger = logging.getLogger(logger_name)
@@ -12,22 +13,18 @@ def create_logger(logger_name, file_name=None):
     logger.addHandler(file_handler)
     return logging.getLogger(logger_name)
 
-logger = create_logger(__name__, "LOG_binancealltickers.log")
+logger = create_logger(__name__, "LOG_allCoinTickerNotification.log")
 
 
-def send_notification():
-    message={"user": "ufv3dchxo6m7jwkn22kcjm6xp3tn9k", "token":"a57fw7ecaq3fwivktb211qv1u1sh7a", "message": "code test"}
-    conn = http.client.HTTPSConnection("api.pushover.net:443")
-    conn.request("POST", "/1/messages.json", urllib.parse.urlencode(message), { "Content-type": "application/x-www-form-urlencoded" })
-    return conn.getresponse()
 
 class ProcessData:
-    records_to_keep = 50*60
+    records_to_keep = 100*6 # stores per 10sec, so 100 min of data
+    volume_multiplier = 10
+    alert_snooze = 60 * 60 # 60 minutes [seconds]
     
     def __init__(self):
-        self.sorted_data = {}
+        self.snoozed_coins = {}
         self.previous_data = {}
-
         self.clean_data = {}
 
 
@@ -38,11 +35,11 @@ class ProcessData:
         """
 
         filtered_to_usdt_tokens = [k for k in msg if "usdt" in k["s"].lower()] 
-        filtered_time_to_1m_sec_interval = [k for k in filtered_to_usdt_tokens if k["E"] % 60000 > 59500 or k["E"] % 60000 < 500] 
+        filtered_time_to_1m_sec_interval = [k for k in filtered_to_usdt_tokens if k["E"] % 10000 > 9500 or k["E"] % 10000 < 500] 
         if len(filtered_time_to_1m_sec_interval) == 0:
             return
-        # self.update_clean_data(filtered_time_to_1m_sec_interval)
-        self.update_clean_data(msg)
+        self.update_clean_data(filtered_time_to_1m_sec_interval)
+        self.run_numbers()
 
     def update_clean_data(self, data):
         """
@@ -74,9 +71,31 @@ class ProcessData:
 
             self.previous_data[coin_name] = coin_entry
 
-    # def check_shit(self):
-    #     ds[ds>ds[ds>0].quantile(0.50)*25]
-    #     return
+    def run_numbers(self):
+        current_time_sec = time()
+        
+        for coin_name in self.clean_data.keys():
+            current_data = self.clean_data[coin_name]
+            # check if snooze is on
+
+            if len(current_data) < self.records_to_keep / 2:
+                continue
+
+            if current_time_sec < self.snoozed_coins.get(coin_name, 0):
+                logger.info(f"Snooze active for: {coin_name}")
+                continue
+            
+            if current_data.volume.quantile(0.99) > current_data.volume.quantile(0.50)* self.volume_multiplier:
+                self.snoozed_coins[coin_name] = current_time_sec + self.alert_snooze
+                self.send_alert(coin_name)
+
+    def send_alert(self, coin_name):
+        logger.info(f"sending alert: {coin_name}")
+        message = f"{coin_name}: {self.volume_multiplier}x fold volume increase "
+        content={"user": "ufv3dchxo6m7jwkn22kcjm6xp3tn9k", "token":"a57fw7ecaq3fwivktb211qv1u1sh7a", "message": message}
+        conn = http.client.HTTPSConnection("api.pushover.net:443")
+        conn.request("POST", "/1/messages.json", urllib.parse.urlencode(content), { "Content-type": "application/x-www-form-urlencoded" })
+        return conn.getresponse()
 
 
 processData = ProcessData()
@@ -89,7 +108,7 @@ def start_web_socket():
     twm.daemon = True
     twm.start()
     twm.start_ticker_socket(callback=processData.process_msg)
-    twm.join(timeout=240)
+    twm.join()
 
 if __name__ == "__main__":
     # https://binance-docs.github.io/apidocs/spot/en/#all-market-tickers-stream
