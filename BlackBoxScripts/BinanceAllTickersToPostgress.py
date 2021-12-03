@@ -73,12 +73,8 @@ class ProcessData:
 
             return
 
-        # logger.info(f"FILTERED: {filtered_time_to_1m_sec_interval}")
-
         clean_data = self.clean_up(filtered_time_to_1m_sec_interval)
-        # logger.info(f"CLEAN: {clean_data}")
         self.save_data(clean_data)
-
 
     def get_adjusted_volume_for_gaps_in_data(self, newVol, time_delta_secs):
         # adjust volume for gaps in time
@@ -87,7 +83,7 @@ class ProcessData:
     def get_volume(self, previous_coin_data, current_coin_data):
         newVol = round(float(current_coin_data["v"]) - round(float(previous_coin_data["v"])), 4)
         
-        time_delta_secs = (current_coin_data["E"]-self.previous_data["E"])/1000
+        time_delta_secs = (current_coin_data["E"]-previous_coin_data["E"])/1000
         if time_delta_secs > self.min_time_gap_secs:
             return self.get_adjusted_volume_for_gaps_in_data(newVol, time_delta_secs)
         return newVol 
@@ -106,7 +102,7 @@ class ProcessData:
                 clean_data[coin_name] = {
                     "E": coin_entry["E"]/1000,
                     "c": round(float(coin_entry["c"]), 4),
-                    "v": self.get_adjusted_volume_for_gaps_in_data(self.previous_data[coin_name], coin_entry)
+                    "v": self.get_volume(self.previous_data[coin_name], coin_entry)
                 }
 
             self.previous_data[coin_name] = coin_entry
