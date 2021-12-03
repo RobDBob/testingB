@@ -61,6 +61,10 @@ def update_bb_on_15min_mark(df, current_timestamp, current_price):
         df["BBMedian"] = df_bb15mL9["BBM_9_2.0"]
     return df
 
+def get_pct_change_in_series(series, periods=5):
+    pct_change = series.pct_change(periods=periods)
+    return
+
 # def bb_trend_slowing_decrease_trend(df_bblower):
 #     """
 #     period 5 appears to be stable

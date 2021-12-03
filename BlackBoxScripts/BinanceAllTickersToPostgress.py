@@ -4,7 +4,7 @@ import logging
 from time import sleep
 
 GET_TABLES_QUERY = "SELECT * FROM information_schema.tables where table_schema = 'public';"
-CREATE_TABLE_QUERY = "CREATE TABLE public.{0} (timestamp int PRIMARY KEY,open decimal,close decimal,volume decimal,quotevolume decimal,lastvolume decimal);"
+CREATE_TABLE_QUERY = "CREATE TABLE public.{0} (timestamp int PRIMARY KEY,close decimal,volume decimal);"
 
 # def create_logger(logger_name, file_name=None):
 #     logger = logging.getLogger(logger_name)
@@ -50,7 +50,11 @@ def execute_query(sql, fetch=False):
 
 class ProcessData:
     query_result_table_name_index = 2
-    
+
+    # vol adjustment for gaps in data
+    min_time_gap_secs = 10
+    average_time_delay_secs = 3
+
     def __init__(self):
         self.sorted_data = {}
         self.previous_data = {}
@@ -59,14 +63,14 @@ class ProcessData:
 
     def process_msg(self, msg):
         """
-        this method is the entry point with logic 
+        this method is the entry point with logic
         Save time stamp in seconds rather than miliseconds
         """
 
-        filtered_to_usdt_tokens = [k for k in msg if "usdt" in k["s"].lower()] 
-        filtered_time_to_1m_sec_interval = [k for k in filtered_to_usdt_tokens if k["E"] % 60000 > 59500 or k["E"] % 60000 < 500] 
+        filtered_to_usdt_tokens = [k for k in msg if "usdt" in k["s"].lower()]
+        filtered_time_to_1m_sec_interval = filtered_to_usdt_tokens #[k for k in filtered_to_usdt_tokens if k["E"] % 10000 > 9500 or k["E"] % 10000 < 500]
         if len(filtered_time_to_1m_sec_interval) == 0:
-            
+
             return
 
         # logger.info(f"FILTERED: {filtered_time_to_1m_sec_interval}")
@@ -75,9 +79,22 @@ class ProcessData:
         # logger.info(f"CLEAN: {clean_data}")
         self.save_data(clean_data)
 
+
+    def get_adjusted_volume_for_gaps_in_data(self, newVol, time_delta_secs):
+        # adjust volume for gaps in time
+        return (newVol / time_delta_secs) * self.average_time_delay_secs
+    
+    def get_volume(self, previous_coin_data, current_coin_data):
+        newVol = round(float(current_coin_data["v"]) - round(float(previous_coin_data["v"])), 4)
+        
+        time_delta_secs = (current_coin_data["E"]-self.previous_data["E"])/1000
+        if time_delta_secs > self.min_time_gap_secs:
+            return self.get_adjusted_volume_for_gaps_in_data(newVol, time_delta_secs)
+        return newVol 
+
     def clean_up(self, data):
         """
-        purpose of this methos is to calculate: 
+        purpose of this methos is to calculate:
             - actual volume traded from 24hr rolling window to 1 min rolling period
             - open & close prices
         """
@@ -86,18 +103,11 @@ class ProcessData:
             coin_name = coin_entry["s"]
 
             if coin_name in self.previous_data:
-                previous_data = self.previous_data[coin_name]
                 clean_data[coin_name] = {
-                    "E": coin_entry["E"],
-                    "o": round(float(previous_data["o"]), 4),
+                    "E": coin_entry["E"]/1000,
                     "c": round(float(coin_entry["c"]), 4),
-                    "v": round(float(coin_entry["v"]) - round(float(previous_data["v"])), 4),
-                    "q": round(float(coin_entry["q"]) - round(float(previous_data["q"])), 4),
-                    "Q": round(float(coin_entry["Q"]), 4),
+                    "v": self.get_adjusted_volume_for_gaps_in_data(self.previous_data[coin_name], coin_entry)
                 }
-                # logger.info(f"PREVIOUS:{coin_name}: {previous_data}")
-                # logger.info(f"CURRENT:{coin_name}: {coin_entry}")
-
 
             self.previous_data[coin_name] = coin_entry
         return clean_data
@@ -107,14 +117,14 @@ class ProcessData:
 
     def create_table(self, table_name):
         execute_query(CREATE_TABLE_QUERY.format(table_name))
-    
+
     def check_table_exists(self, table_name):
         return table_name in self.available_tables
 
     def make_sure_table_exists(self, expected_table_name):
         if not self.check_table_exists(expected_table_name):
             self.create_table(expected_table_name)
-        
+
         self.update_existing_tables_from_db()
         if expected_table_name not in self.available_tables:
             sleep(1)
@@ -126,15 +136,12 @@ class ProcessData:
         for coin_name in clean_data.keys():
             expected_table_name = f"ticker_{coin_name}".lower()
             if self.make_sure_table_exists(expected_table_name):
-                time_stamp_secs = round(clean_data[coin_name]['E']/1000)
-                opening_price = float(clean_data[coin_name]['o'])
+                time_stamp_secs = round(clean_data[coin_name]['E'])
                 closing_price = float(clean_data[coin_name]['c'])
                 volume = float(clean_data[coin_name]['v'])
-                quoted_volume = float(clean_data[coin_name]['q'])
-                last_volume = float(clean_data[coin_name]['Q'])
-                
-                values = f"{time_stamp_secs}, {opening_price}, {closing_price}, {volume}, {quoted_volume}, {last_volume}"
-                sql_query = f'INSERT INTO "{expected_table_name}" (timestamp, open, close, volume, quotevolume, lastvolume) VALUES ({values})'
+
+                values = f"{time_stamp_secs}, {closing_price}, {volume}"
+                sql_query = f'INSERT INTO "{expected_table_name}" (timestamp, close, volume) VALUES ({values})'
                 execute_query(sql_query)
 
 
@@ -152,5 +159,5 @@ def start_web_socket():
 
 if __name__ == "__main__":
     # https://binance-docs.github.io/apidocs/spot/en/#all-market-tickers-stream
-  
+
     start_web_socket()
