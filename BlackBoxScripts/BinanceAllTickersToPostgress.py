@@ -78,7 +78,7 @@ class ProcessData:
 
     def get_adjusted_volume_for_gaps_in_data(self, newVol, time_delta_secs):
         # adjust volume for gaps in time
-        return (newVol / time_delta_secs) * self.average_time_delay_secs
+        return round((newVol / time_delta_secs) * self.average_time_delay_secs, 4)
     
     def get_volume(self, previous_coin_data, current_coin_data):
         newVol = round(float(current_coin_data["v"]) - round(float(previous_coin_data["v"])), 4)
