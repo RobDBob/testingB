@@ -24,8 +24,8 @@ df.loc[df.v<0, "v"]=0
 
 from Helpers import DBFunctions
 from Helpers import PandaFunctions
-r=DBFunctions.get_records_after_timestamp(0, "ticker_nulsusdt")
-df=PandaFunctions.get_df_from_records(r, ["timeStamp", "o", "c", "v", "qv", "Qv"], setIndex=True)
+r=DBFunctions.get_records_after_timestamp(0, "ticker_cosusdt")
+df=PandaFunctions.get_df_from_records(r, ["timeStamp", "c", "v"], setIndex=True)
 df["vEMAPctChange"]=df.v.pct_change(periods=100)
 df.to_csv("PEAKS.csv")
 
