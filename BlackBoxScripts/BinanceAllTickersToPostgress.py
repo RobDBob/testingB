@@ -120,8 +120,8 @@ class ProcessData:
     def make_sure_table_exists(self, expected_table_name):
         if not self.check_table_exists(expected_table_name):
             self.create_table(expected_table_name)
+            self.update_existing_tables_from_db()
 
-        self.update_existing_tables_from_db()
         if expected_table_name not in self.available_tables:
             sleep(1)
             self.update_existing_tables_from_db()
