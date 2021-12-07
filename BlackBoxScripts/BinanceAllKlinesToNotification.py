@@ -1,10 +1,20 @@
 import pandas as pd
 import logging
+from datetime import datetime
 import pandas_ta as ta
-from binance import enums
-from binance import ThreadedWebsocketManager
-from binanceHelper.bFinanceAPIFunctions import getClient
-from Helpers.DateHelper import get_datetime_single
+from binance import Client,ThreadedWebsocketManager, enums
+
+
+def getClient(test_net=False):
+    api_key_test = "fjwtEFGgh3rAO29WVPJ7IjQl3dN0Ml0147iLblPPZPQHsm6DGMkJ77LGQkLie20S"
+    api_secret_test = "fSKO7rQtgWKePuLZf2IZuTYDl7RDZnniKUCoN9VAgQyjqsCKjza7ftQM00yEivkW"
+    return Client(api_key=api_key_test, api_secret=api_secret_test, testnet=test_net)
+
+
+date_time_format = '%Y-%m-%d %H:%M:%S'
+
+def get_datetime_single(date_time_stamp):
+    return datetime.utcfromtimestamp((int(date_time_stamp))).strftime(date_time_format)
 
 def create_logger(logger_name, file_name=None):
     logger = logging.getLogger(logger_name)
@@ -18,6 +28,10 @@ def create_logger(logger_name, file_name=None):
 logger = create_logger(__name__, "LOG_binanceKline.log")
 
 class ProcessData:
+    vol_increase_x = 6
+    not_increase_x = 6
+    back_off_after_notification = 3600
+
     def __init__(self):
         self.full_klines_data = {}
         self.anomaly_detected_timestamp = {}
@@ -27,8 +41,8 @@ class ProcessData:
 
     def check_for_anomaly(self, symbol, number_of_trades, volume, time_stamp):
         # check if already was hinted
-        if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + 3600 > time_stamp:
-            logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + 3600}")
+        if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification > time_stamp:
+            logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification}")
             return False
 
         symbol_data = self.full_klines_data.get(symbol, None)
@@ -36,16 +50,16 @@ class ProcessData:
             # no data available to compare yet
             return False
 
-        anomaly_detected = (symbol_data.tail(1).volSMA * 8 > volume).bool() & (symbol_data.tail(1).NOTSMA * 8 > number_of_trades).bool()
+        anomaly_detected = (symbol_data.tail(1).volSMA * self.vol_increase_x < volume).bool() & (symbol_data.tail(1).NOTSMA * self.not_increase_x < number_of_trades).bool()
         
         if anomaly_detected:
-            logger.info(f"{symbol} - anomaly detected")
+            logger.info(f"{get_datetime_single(time_stamp)}: {symbol}, v:{volume}, not: {number_of_trades} - anomaly detected")
             self.anomaly_detected_timestamp[symbol] = time_stamp
 
         return anomaly_detected
 
     def notify(self, symbol, price, time_stamp):
-        logger.info(f"{get_datetime_single(time_stamp)}: NOTIFICATION: {symbol}, price: {price}")
+        logger.info(f"{get_datetime_single(time_stamp)}: {symbol} =============== NOTIFICATION =============== : price: {price}")
         return
 
     def process_msg(self, msg):
@@ -62,6 +76,10 @@ class ProcessData:
         time_stamp = msg["data"]["k"]["T"]/1000
 
         if not is_kline_complete:
+            if len(self.full_klines_data.get(symbol, [])) < 60:
+                # logger.info(f"{symbol}: insufficient kline data, continue")
+                return
+            
             if self.check_for_anomaly(symbol, number_of_trades, volume, time_stamp):
                 self.notify(symbol, close, time_stamp)
             return
@@ -75,12 +93,14 @@ class ProcessData:
         self.save_data(data, symbol)
 
     def save_data(self, data, symbol):
-        logger.info(f"Symbol: {symbol} - new data added")
+        # logger.info(f"Symbol: {symbol} - new data added")
         if symbol not in self.full_klines_data:
             self.full_klines_data[symbol] = pd.DataFrame()
 
+        if len(self.full_klines_data[symbol]) > 150:
+            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(120)
+
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
-        print(self.full_klines_data)
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=60)
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=60)
 
