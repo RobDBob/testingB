@@ -1,7 +1,8 @@
+import sys
 from time import sleep
 import requests
 import pandas as pd
-import logging
+from loguru import logger
 from datetime import datetime
 import pandas_ta as ta
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
@@ -22,21 +23,10 @@ def getClient(test_net=False):
     return (api_key, api_secret)
 
 
-date_time_format = '%Y-%m-%d %H:%M:%S'
-
 def get_datetime_single(date_time_stamp):
-    return datetime.utcfromtimestamp((int(date_time_stamp))).strftime(date_time_format)
+    return datetime.utcfromtimestamp((int(date_time_stamp))).strftime('%Y-%m-%d %H:%M:%S')
 
-def create_logger(logger_name, file_name=None):
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler(file_name)
-    formatter    = logging.Formatter('%(asctime)s(%(levelname)s): %(message)s')
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    return logging.getLogger(logger_name)
-
-logger = create_logger(__name__, "LOG_binanceKline.log")
+logger.add("LOG_binance_notification.log", format="{time} {level} {message}", level="INFO",  rotation="100 MB")
 
 class ProcessData:
     vol_increase_x = 6
@@ -126,7 +116,7 @@ def get_usdt_symbols():
     response_json = res.json()
     all_symbols = response_json["symbols"]
     usdt_symbols = [k["symbol"] for k in response_json["symbols"] if "USDT" in k["symbol"]]
-    print(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
+    logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
     return usdt_symbols
 
 def start_web_socket(processData):
@@ -164,8 +154,8 @@ def start_web_socket(processData):
             processData.process_msg(data)
 
         except Exception:
-            print(f"last kline: {data}")
-            print(traceback.format_exc())
+            logger.info(f"last kline: {data}")
+            logger.info(traceback.format_exc())
             websocket_manager.stop_manager_with_all_streams()
             exit(1)
         
