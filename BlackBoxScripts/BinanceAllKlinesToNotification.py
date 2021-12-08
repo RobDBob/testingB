@@ -26,7 +26,7 @@ def getClient(test_net=False):
 def get_datetime_single(date_time_stamp):
     return datetime.utcfromtimestamp((int(date_time_stamp))).strftime('%Y-%m-%d %H:%M:%S')
 
-logger.add("LOG_binance_notification.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="100 MB")
+logger.add("LOG_binance_notification.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
 
 class ProcessData:
     vol_increase_x = 6
@@ -126,7 +126,7 @@ def start_web_socket(processData):
     """
     import traceback
 
-    coin_pairs = get_usdt_symbols()[:5]
+    coin_pairs = get_usdt_symbols()
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
