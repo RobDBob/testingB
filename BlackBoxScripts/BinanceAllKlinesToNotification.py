@@ -1,4 +1,4 @@
-import sys
+import time
 from time import sleep
 import requests
 import pandas as pd
@@ -76,8 +76,6 @@ class ProcessData:
         close = round(float(msg["data"]["k"]["c"]), 4)
         time_stamp = msg["data"]["E"]/1000
 
-        logger.info(f"{symbol} - {is_kline_complete}")
-
         if not is_kline_complete:
             if len(self.full_klines_data.get(symbol, [])) < 60:
                 # logger.info(f"{symbol}: insufficient kline data, continue")
@@ -87,8 +85,6 @@ class ProcessData:
                 self.notify(symbol, volume, close, time_stamp)
             return
 
-        logger.info("2")
-
         data = {
             "timeStamp": time_stamp,
             "close": close, 
@@ -97,21 +93,19 @@ class ProcessData:
 
         self.save_data(data, symbol)
 
-        logger.info("3")
-
     def save_data(self, data, symbol):
         # logger.info(f"Symbol: {symbol} - new data added")
         if symbol not in self.full_klines_data:
+            logger.info(f"{symbol} - create new data frame for storage")
             self.full_klines_data[symbol] = pd.DataFrame()
 
         if len(self.full_klines_data[symbol]) > 150:
+            logger.info(f"{symbol} - trimming data down to 120")
             self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(120)
 
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=60)
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=60)
-
-
 
 
 def get_usdt_symbols():
@@ -136,8 +130,14 @@ def start_web_socket(processData):
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
-    
     while True:
+        if (int(time.time())%300 == 0):
+            # health check
+            logger.info("HEALTH CHECK")
+            logger.info(f"Stored coin number: {len(processData.full_klines_data)}")
+            logger.info(f"Stored coin number entries (BTCUSDT): {len(processData.full_klines_data.get('BTCUSD', []))}")
+
+
         if websocket_manager.is_manager_stopping():
             exit(0)
 
@@ -159,8 +159,8 @@ def start_web_socket(processData):
             processData.process_msg(data)
 
         except Exception:
-            logger.info(f"last kline: {data}")
-            logger.info(traceback.format_exc())
+            logger.error(f"last kline: {data}")
+            logger.error(traceback.format_exc())
             websocket_manager.stop_manager_with_all_streams()
             exit(1)
         
