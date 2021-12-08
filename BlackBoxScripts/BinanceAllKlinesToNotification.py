@@ -76,6 +76,8 @@ class ProcessData:
         close = round(float(msg["data"]["k"]["c"]), 4)
         time_stamp = msg["data"]["E"]/1000
 
+        logger.info(f"{symbol} - {is_kline_complete}")
+
         if not is_kline_complete:
             if len(self.full_klines_data.get(symbol, [])) < 60:
                 # logger.info(f"{symbol}: insufficient kline data, continue")
@@ -85,6 +87,8 @@ class ProcessData:
                 self.notify(symbol, volume, close, time_stamp)
             return
 
+        logger.info("2")
+
         data = {
             "timeStamp": time_stamp,
             "close": close, 
@@ -92,6 +96,8 @@ class ProcessData:
             "numberOfTrades": number_of_trades}
 
         self.save_data(data, symbol)
+
+        logger.info("3")
 
     def save_data(self, data, symbol):
         # logger.info(f"Symbol: {symbol} - new data added")
@@ -126,7 +132,7 @@ def start_web_socket(processData):
     """
     import traceback
 
-    coin_pairs = get_usdt_symbols()
+    coin_pairs = get_usdt_symbols()[:5]
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
@@ -136,7 +142,6 @@ def start_web_socket(processData):
             exit(0)
 
         data = websocket_manager.pop_stream_data_from_stream_buffer()
-
         
         if data is False:
             sleep(0.01)
@@ -151,7 +156,6 @@ def start_web_socket(processData):
             continue
 
         try:
-            # print(data)
             processData.process_msg(data)
 
         except Exception:
