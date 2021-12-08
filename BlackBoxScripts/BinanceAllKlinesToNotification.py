@@ -26,7 +26,7 @@ def getClient(test_net=False):
 def get_datetime_single(date_time_stamp):
     return datetime.utcfromtimestamp((int(date_time_stamp))).strftime('%Y-%m-%d %H:%M:%S')
 
-logger.add("LOG_binance_notification.log", format="{time} {level} {message}", level="INFO",  rotation="100 MB")
+logger.add("LOG_binance_notification.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="100 MB")
 
 class ProcessData:
     vol_increase_x = 6
@@ -119,6 +119,7 @@ def get_usdt_symbols():
     logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
     return usdt_symbols
 
+@logger.catch
 def start_web_socket(processData):
     """
     listen to websocket, populate postgresql with result
