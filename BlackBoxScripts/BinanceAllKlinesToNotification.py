@@ -130,12 +130,15 @@ def start_web_socket(processData):
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
+    previous_time_stamp = 0
     while True:
-        if (int(time.time())%300 == 0):
+        time_stamp = int(time.time())
+        if (time_stamp%300 == 0 and previous_time_stamp != time_stamp):
             # health check
             logger.info("HEALTH CHECK")
             logger.info(f"Stored coin number: {len(processData.full_klines_data)}")
             logger.info(f"Stored coin number entries (BTCUSDT): {len(processData.full_klines_data.get('BTCUSD', []))}")
+            previous_time_stamp = time_stamp
 
 
         if websocket_manager.is_manager_stopping():
