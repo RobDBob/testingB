@@ -135,7 +135,7 @@ def start_web_socket(processData):
     """
     import traceback
 
-    coin_pairs = get_usdt_symbols()[:1]
+    coin_pairs = get_usdt_symbols()
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
@@ -160,6 +160,7 @@ def start_web_socket(processData):
             continue
 
         try:
+            # print(data)
             processData.process_msg(data)
 
         except Exception:
