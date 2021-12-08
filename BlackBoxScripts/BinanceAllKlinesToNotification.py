@@ -1,14 +1,25 @@
+from time import sleep
+import requests
 import pandas as pd
 import logging
 from datetime import datetime
 import pandas_ta as ta
-from binance import Client,ThreadedWebsocketManager, enums
+from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
 
 
 def getClient(test_net=False):
-    api_key_test = "fjwtEFGgh3rAO29WVPJ7IjQl3dN0Ml0147iLblPPZPQHsm6DGMkJ77LGQkLie20S"
-    api_secret_test = "fSKO7rQtgWKePuLZf2IZuTYDl7RDZnniKUCoN9VAgQyjqsCKjza7ftQM00yEivkW"
-    return Client(api_key=api_key_test, api_secret=api_secret_test, testnet=test_net)
+    from pathlib import Path
+    from os import path
+    import json
+    with open(path.join(Path.home(), "binance.json")) as fp:
+        b_config = json.loads(fp.read())
+    if test_net:
+        api_key = b_config["api_key_test"]
+        api_secret = b_config["api_secret_test"]
+    else:
+        api_key = b_config["api_key"]
+        api_secret = b_config["api_secret"]
+    return (api_key, api_secret)
 
 
 date_time_format = '%Y-%m-%d %H:%M:%S'
@@ -36,13 +47,13 @@ class ProcessData:
         self.full_klines_data = {}
         self.anomaly_detected_timestamp = {}
         
-        # mark purchase, so we'll need time, timestop
-        self.purchased_symbol = {}
+        # watch for price change, used to estimate accuracy
+        self.watch_symbol = {}
 
     def check_for_anomaly(self, symbol, number_of_trades, volume, time_stamp):
         # check if already was hinted
         if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification > time_stamp:
-            logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification}")
+            # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification}")
             return False
 
         symbol_data = self.full_klines_data.get(symbol, None)
@@ -53,13 +64,13 @@ class ProcessData:
         anomaly_detected = (symbol_data.tail(1).volSMA * self.vol_increase_x < volume).bool() & (symbol_data.tail(1).NOTSMA * self.not_increase_x < number_of_trades).bool()
         
         if anomaly_detected:
-            logger.info(f"{get_datetime_single(time_stamp)}: {symbol}, v:{volume}, not: {number_of_trades} - anomaly detected")
+            # logger.info(f"{get_datetime_single(time_stamp)}: {symbol}, v:{volume}, not: {number_of_trades} - anomaly detected")
             self.anomaly_detected_timestamp[symbol] = time_stamp
 
         return anomaly_detected
 
-    def notify(self, symbol, price, time_stamp):
-        logger.info(f"{get_datetime_single(time_stamp)}: {symbol} =============== NOTIFICATION =============== : price: {price}")
+    def notify(self, symbol, volume, price, time_stamp):
+        logger.info(f"{get_datetime_single(time_stamp)}: {symbol} =============== NOTIFICATION =============== : price: {price}, volume: {volume}")
         return
 
     def process_msg(self, msg):
@@ -73,7 +84,7 @@ class ProcessData:
         number_of_trades = msg["data"]["k"]["n"]
         volume = round(float(msg["data"]["k"]["v"]), 4)
         close = round(float(msg["data"]["k"]["c"]), 4)
-        time_stamp = msg["data"]["k"]["T"]/1000
+        time_stamp = msg["data"]["E"]/1000
 
         if not is_kline_complete:
             if len(self.full_klines_data.get(symbol, [])) < 60:
@@ -81,7 +92,7 @@ class ProcessData:
                 return
             
             if self.check_for_anomaly(symbol, number_of_trades, volume, time_stamp):
-                self.notify(symbol, close, time_stamp)
+                self.notify(symbol, volume, close, time_stamp)
             return
 
         data = {
@@ -105,28 +116,60 @@ class ProcessData:
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=60)
 
 
-processData = ProcessData()
 
-def get_kline_steam_names():
-    client = getClient(test_net=False)
-    products = client.get_products()
-    coin_pairs = [k["s"] for k in products["data"] if "USDT" in k["s"]]
-    print(f"retrieved {len(coin_pairs)} coin pairs")
-    return [f"{symbol.lower()}@kline_{enums.KLINE_INTERVAL_1MINUTE}" for symbol in coin_pairs]
 
-def start_web_socket():
+def get_usdt_symbols():
+    res = requests.get("https://api.binance.com/api/v3/exchangeInfo")
+    if not res.ok:
+        logger.error(f"Failed to get binance exchange info, status code: {res.status_code}")
+        raise
+    response_json = res.json()
+    all_symbols = response_json["symbols"]
+    usdt_symbols = [k["symbol"] for k in response_json["symbols"] if "USDT" in k["symbol"]]
+    print(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
+    return usdt_symbols
+
+def start_web_socket(processData):
     """
     listen to websocket, populate postgresql with result
     """
-    streams = get_kline_steam_names()[:3]
-    logger.info(streams)
-    twm = ThreadedWebsocketManager()
-    twm.daemon = True
-    twm.start()
-    twm.start_multiplex_socket(callback=processData.process_msg, streams=streams)
-    twm.join(120)
-    twm.stop()
+    import traceback
+
+    coin_pairs = get_usdt_symbols()[:1]
+    websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
+    websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
+    
+    
+    while True:
+        if websocket_manager.is_manager_stopping():
+            exit(0)
+
+        data = websocket_manager.pop_stream_data_from_stream_buffer()
+
+        
+        if data is False:
+            sleep(0.01)
+            continue
+
+        elif data is None:
+            continue
+
+        elif data.get("result", 1) is None:
+            # odd case at the start when no result is given
+            # dict: {'result': None, 'id': 1}
+            continue
+
+        try:
+            processData.process_msg(data)
+
+        except Exception:
+            print(f"last kline: {data}")
+            print(traceback.format_exc())
+            websocket_manager.stop_manager_with_all_streams()
+            exit(1)
+        
 
 if __name__ == "__main__":
-    # https://binance-docs.github.io/apidocs/spot/en/#all-market-tickers-stream
-    start_web_socket()
+    # https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams
+    processData = ProcessData()
+    start_web_socket(processData)
