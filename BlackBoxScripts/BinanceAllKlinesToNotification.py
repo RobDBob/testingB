@@ -60,7 +60,7 @@ class ProcessData:
         return anomaly_detected
 
     def notify(self, symbol, volume, price, time_stamp):
-        logger.info(f"{get_datetime_single(time_stamp)}: {symbol} =============== NOTIFICATION =============== : price: {price}, volume: {volume}")
+        logger.info(f"{get_datetime_single(time_stamp)}: {symbol} == NOTIFICATION == : ${price}, vol:{volume}")
         return
 
     def process_msg(self, msg):
@@ -94,13 +94,12 @@ class ProcessData:
         self.save_data(data, symbol)
 
     def save_data(self, data, symbol):
-        # logger.info(f"Symbol: {symbol} - new data added")
         if symbol not in self.full_klines_data:
-            logger.info(f"{symbol} - create new data frame for storage")
+            logger.debug(f"{symbol} - create new data frame for storage")
             self.full_klines_data[symbol] = pd.DataFrame()
 
         if len(self.full_klines_data[symbol]) > 150:
-            logger.info(f"{symbol} - trimming data down to 120")
+            logger.debug(f"{symbol} - trimming data down to 120")
             self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(120)
 
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
@@ -133,13 +132,12 @@ def start_web_socket(processData):
     previous_time_stamp = 0
     while True:
         time_stamp = int(time.time())
-        if (time_stamp%300 == 0 and previous_time_stamp != time_stamp):
+        if (time_stamp%300 == 0 and previous_time_stamp < time_stamp):
             # health check
             logger.info("HEALTH CHECK")
             logger.info(f"Stored coin number: {len(processData.full_klines_data)}")
-            logger.info(f"Stored coin number entries (BTCUSDT): {len(processData.full_klines_data.get('BTCUSD', []))}")
+            logger.info(f"Stored coin number entries (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}")
             previous_time_stamp = time_stamp
-
 
         if websocket_manager.is_manager_stopping():
             exit(0)
