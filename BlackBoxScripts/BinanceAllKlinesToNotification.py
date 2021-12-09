@@ -29,19 +29,25 @@ def get_datetime_single(date_time_stamp):
 logger.add("LOG_binance_notification.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
 
 class ProcessData:
-    vol_increase_x = 8
-    not_increase_x = 8
+    vol_increase_x = 15
+    not_increase_x = 15
     back_off_after_notification = 3600
     max_kline_storage_count = 360
+
+    ta_average_length = 60
 
     def __init__(self):
         self.full_klines_data = {}
         self.anomaly_detected_timestamp = {}
         
         # watch for price change, used to estimate accuracy
-        self.watch_symbol = {}
+        self.trade_record = {}
 
     def check_for_anomaly(self, symbol, data):
+        if len(self.full_klines_data.get(symbol, [])) < self.ta_average_length:
+            # logger.info(f"{symbol}: insufficient kline data, continue")
+            return
+
         # check if already was hinted
         if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification > data["timeStamp"]:
             # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification}")
@@ -55,14 +61,17 @@ class ProcessData:
         volSMAValue_last_avg_value = symbol_data.tail(1)["volSMA"]
         number_of_trades_last_avg_value = symbol_data.tail(1)["NOTSMA"] 
 
-        if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]).bool() & (number_of_trades_last_avg_value* self.not_increase_x < data["numberOfTrades"]).bool():
+        if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]).bool() & (number_of_trades_last_avg_value * self.not_increase_x < data["numberOfTrades"]).bool():
             self.anomaly_detected_timestamp[symbol] = data["timeStamp"]
             
             vol_pct_change = round((float(volSMAValue_last_avg_value)/data["volume"])*100, 4)
             number_of_trades_pct_change = round((float(number_of_trades_last_avg_value)/data["numberOfTrades"])*100, 4)
             
-            msg = f"{get_datetime_single(data['timeStamp'])}: {symbol} == ANOMALY == : current ${data['close']}, vol pct: {vol_pct_change}%, number of trades pct: {number_of_trades_pct_change}%"
-            logger.info(msg)
+            vol_msg = f"\nVOL: {data['volume']}->{volSMAValue_last_avg_value}({vol_pct_change})%"
+            trades_msg  = f"\nNOT: {data['numberOfTrades']}->{number_of_trades_last_avg_value}({number_of_trades_pct_change})%"
+            logger.info(f"{symbol}: at ${data['close']}; {vol_msg}; {trades_msg}")
+            return True
+        return False
 
     def process_msg(self, msg):
         """
@@ -79,14 +88,16 @@ class ProcessData:
             "volume": round(float(msg["data"]["k"]["v"]), 4), 
             "numberOfTrades": msg["data"]["k"]["n"]}
 
-        if not is_kline_complete:
-            if len(self.full_klines_data.get(symbol, [])) < 60:
-                # logger.info(f"{symbol}: insufficient kline data, continue")
-                return
-            
-            self.check_for_anomaly(symbol, data)
+        if is_kline_complete:
+            self.save_data(data, symbol)
+                    
+        if self.check_for_anomaly(symbol, data):
+            self.record_trade(symbol, data)
 
-        self.save_data(data, symbol)
+    def record_trade(self, symbol, data):
+        # check if price is below 
+        # {symbol: {buy:{time, price}, }}}
+        return
 
     def save_data(self, data, symbol):
         if symbol not in self.full_klines_data:
@@ -98,8 +109,8 @@ class ProcessData:
             self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.max_kline_storage_count)
 
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
-        self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=60)
-        self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=60)
+        self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
+        self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)
 
 
 def get_usdt_symbols():
@@ -127,7 +138,7 @@ def start_web_socket(processData):
     previous_time_stamp = 0
     while True:
         time_stamp = int(time.time())
-        if (time_stamp%300 == 0 and previous_time_stamp < time_stamp):
+        if (time_stamp%900 == 0 and previous_time_stamp < time_stamp):
             # health check
             logger.info("HEALTH CHECK")
             logger.info(f"Stored coin number: {len(processData.full_klines_data)}")
