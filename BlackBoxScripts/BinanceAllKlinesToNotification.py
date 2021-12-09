@@ -32,6 +32,7 @@ class ProcessData:
     vol_increase_x = 6
     not_increase_x = 6
     back_off_after_notification = 3600
+    max_kline_storage_count = 360
 
     def __init__(self):
         self.full_klines_data = {}
@@ -40,9 +41,9 @@ class ProcessData:
         # watch for price change, used to estimate accuracy
         self.watch_symbol = {}
 
-    def check_for_anomaly(self, symbol, number_of_trades, volume, time_stamp):
+    def check_for_anomaly(self, symbol, data):
         # check if already was hinted
-        if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification > time_stamp:
+        if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification > data["timeStamp"]:
             # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification}")
             return False
 
@@ -51,16 +52,15 @@ class ProcessData:
             # no data available to compare yet
             return False
 
-        anomaly_detected = (symbol_data.tail(1).volSMA * self.vol_increase_x < volume).bool() & (symbol_data.tail(1).NOTSMA * self.not_increase_x < number_of_trades).bool()
+        anomaly_detected = (symbol_data.tail(1)["volSMA"] * self.vol_increase_x < data["volume"]).bool() & (symbol_data.tail(1)["NOTSMA"] * self.not_increase_x < data["numberOfTrades"]).bool()
         
         if anomaly_detected:
-            # logger.info(f"{get_datetime_single(time_stamp)}: {symbol}, v:{volume}, not: {number_of_trades} - anomaly detected")
-            self.anomaly_detected_timestamp[symbol] = time_stamp
+            self.anomaly_detected_timestamp[symbol] = data["timeStamp"]
 
         return anomaly_detected
 
-    def notify(self, symbol, volume, price, time_stamp):
-        logger.info(f"{get_datetime_single(time_stamp)}: {symbol} == NOTIFICATION == : ${price}, vol:{volume}")
+    def notify(self, symbol, data):
+        logger.info(f"{get_datetime_single(data['timeStamp'])}: {symbol} == NOTIFICATION == : ${data['close']}, vol:{data['volume']}")
         return
 
     def process_msg(self, msg):
@@ -71,25 +71,23 @@ class ProcessData:
 
         is_kline_complete = msg["data"]["k"]["x"]
         symbol = msg["data"]["s"]
-        number_of_trades = msg["data"]["k"]["n"]
-        volume = round(float(msg["data"]["k"]["v"]), 4)
-        close = round(float(msg["data"]["k"]["c"]), 4)
-        time_stamp = msg["data"]["E"]/1000
+        
+        data = {
+            "timeStamp": msg["data"]["E"]/1000,
+            "close": round(float(msg["data"]["k"]["c"]), 4), 
+            "volume": round(float(msg["data"]["k"]["v"]), 4), 
+            "numberOfTrades": msg["data"]["k"]["n"]}
 
         if not is_kline_complete:
             if len(self.full_klines_data.get(symbol, [])) < 60:
                 # logger.info(f"{symbol}: insufficient kline data, continue")
                 return
             
-            if self.check_for_anomaly(symbol, number_of_trades, volume, time_stamp):
-                self.notify(symbol, volume, close, time_stamp)
+            if self.check_for_anomaly(symbol, data):
+                self.notify(symbol, data)
             return
 
-        data = {
-            "timeStamp": time_stamp,
-            "close": close, 
-            "volume": volume, 
-            "numberOfTrades": number_of_trades}
+
 
         self.save_data(data, symbol)
 
@@ -98,9 +96,9 @@ class ProcessData:
             logger.debug(f"{symbol} - create new data frame for storage")
             self.full_klines_data[symbol] = pd.DataFrame()
 
-        if len(self.full_klines_data[symbol]) > 150:
-            logger.debug(f"{symbol} - trimming data down to 120")
-            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(120)
+        if len(self.full_klines_data[symbol]) > ( self.max_kline_storage_count * 1.5) :
+            logger.debug(f"{symbol} - trimming data down to {self.max_kline_storage_count}")
+            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.max_kline_storage_count)
 
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=60)
