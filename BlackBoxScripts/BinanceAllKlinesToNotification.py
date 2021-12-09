@@ -29,8 +29,8 @@ def get_datetime_single(date_time_stamp):
 logger.add("LOG_binance_notification.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
 
 class ProcessData:
-    vol_increase_x = 6
-    not_increase_x = 6
+    vol_increase_x = 8
+    not_increase_x = 8
     back_off_after_notification = 3600
     max_kline_storage_count = 360
 
@@ -51,17 +51,18 @@ class ProcessData:
         if symbol_data is None:
             # no data available to compare yet
             return False
-
-        anomaly_detected = (symbol_data.tail(1)["volSMA"] * self.vol_increase_x < data["volume"]).bool() & (symbol_data.tail(1)["NOTSMA"] * self.not_increase_x < data["numberOfTrades"]).bool()
         
-        if anomaly_detected:
+        volSMAValue_last_avg_value = symbol_data.tail(1)["volSMA"]
+        number_of_trades_last_avg_value = symbol_data.tail(1)["NOTSMA"] 
+
+        if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]).bool() & (number_of_trades_last_avg_value* self.not_increase_x < data["numberOfTrades"]).bool():
             self.anomaly_detected_timestamp[symbol] = data["timeStamp"]
-
-        return anomaly_detected
-
-    def notify(self, symbol, data):
-        logger.info(f"{get_datetime_single(data['timeStamp'])}: {symbol} == NOTIFICATION == : ${data['close']}, vol:{data['volume']}")
-        return
+            
+            vol_pct_change = round((float(volSMAValue_last_avg_value)/data["volume"])*100, 4)
+            number_of_trades_pct_change = round((float(number_of_trades_last_avg_value)/data["numberOfTrades"])*100, 4)
+            
+            msg = f"{get_datetime_single(data['timeStamp'])}: {symbol} == ANOMALY == : current ${data['close']}, vol pct: {vol_pct_change}%, number of trades pct: {number_of_trades_pct_change}%"
+            logger.info(msg)
 
     def process_msg(self, msg):
         """
@@ -83,11 +84,7 @@ class ProcessData:
                 # logger.info(f"{symbol}: insufficient kline data, continue")
                 return
             
-            if self.check_for_anomaly(symbol, data):
-                self.notify(symbol, data)
-            return
-
-
+            self.check_for_anomaly(symbol, data)
 
         self.save_data(data, symbol)
 
