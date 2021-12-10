@@ -3,10 +3,13 @@ from binanceHelper import const
 import pandas as pd
 import requests
 from binanceHelper.bFinanceAPIFunctions import getBinanceConfig
+from loguru import logger
+
+logger.add("LOG_api.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
 
 class BinanceClient:
     def __init__(self, testNet=False):
-        self.config = getBinanceConfig(testNet)
+        self.config = getBinanceConfig(logger, testNet)
         # pd.set_option('display.max_rows', None)
 
     def get_exchange_info(self):

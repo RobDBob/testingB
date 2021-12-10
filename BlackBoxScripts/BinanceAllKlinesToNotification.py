@@ -4,7 +4,6 @@ import pandas as pd
 from loguru import logger
 from datetime import datetime
 import pandas_ta as ta
-from binanceHelper.bFinanceAPIFunctions import getClient
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
 from binanceHelper.BinanceClient import BinanceClient
 
@@ -109,9 +108,7 @@ def start_web_socket(processData):
     """
     listen to websocket, populate postgresql with result
     """
-    
-
-    coin_pairs = getClient().get_usdt_symbols()
+    coin_pairs = processData.api_client.get_usdt_symbols()
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
