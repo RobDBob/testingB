@@ -1,26 +1,11 @@
+import traceback
 import time
-from time import sleep
-import requests
 import pandas as pd
 from loguru import logger
 from datetime import datetime
 import pandas_ta as ta
+from binanceHelper.bFinanceAPIFunctions import getClient
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
-
-
-def getClient(test_net=False):
-    from pathlib import Path
-    from os import path
-    import json
-    with open(path.join(Path.home(), "binance.json")) as fp:
-        b_config = json.loads(fp.read())
-    if test_net:
-        api_key = b_config["api_key_test"]
-        api_secret = b_config["api_secret_test"]
-    else:
-        api_key = b_config["api_key"]
-        api_secret = b_config["api_secret"]
-    return (api_key, api_secret)
 
 
 def get_datetime_single(date_time_stamp):
@@ -58,16 +43,16 @@ class ProcessData:
             # no data available to compare yet
             return False
         
-        volSMAValue_last_avg_value = symbol_data.tail(1)["volSMA"]
-        number_of_trades_last_avg_value = symbol_data.tail(1)["NOTSMA"] 
+        volSMAValue_last_avg_value = round(float(symbol_data.tail(1)["volSMA"].values[0]), 4)
+        number_of_trades_last_avg_value = round(float(symbol_data.tail(1)["NOTSMA"].values[0]), 4)
 
-        if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]).bool() & (number_of_trades_last_avg_value * self.not_increase_x < data["numberOfTrades"]).bool():
+        if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]) and (number_of_trades_last_avg_value * self.not_increase_x < data["numberOfTrades"]):
             self.anomaly_detected_timestamp[symbol] = data["timeStamp"]
             
-            vol_pct_change = round((float(volSMAValue_last_avg_value)/data["volume"])*100, 4)
+            vol_pct_change = round((volSMAValue_last_avg_value/data["volume"])*100, 4)
             number_of_trades_pct_change = round((float(number_of_trades_last_avg_value)/data["numberOfTrades"])*100, 4)
             
-            vol_msg = f"\nVOL: {data['volume']}->{volSMAValue_last_avg_value}({vol_pct_change})%"
+            vol_msg = f"\nVOL: {volSMAValue_last_avg_value}->{data['volume']}({vol_pct_change})%"
             trades_msg  = f"\nNOT: {data['numberOfTrades']}->{number_of_trades_last_avg_value}({number_of_trades_pct_change})%"
             logger.info(f"{symbol}: at ${data['close']}; {vol_msg}; {trades_msg}")
             return True
@@ -113,25 +98,14 @@ class ProcessData:
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)
 
 
-def get_usdt_symbols():
-    res = requests.get("https://api.binance.com/api/v3/exchangeInfo")
-    if not res.ok:
-        logger.error(f"Failed to get binance exchange info, status code: {res.status_code}")
-        raise
-    response_json = res.json()
-    all_symbols = response_json["symbols"]
-    usdt_symbols = [k["symbol"] for k in response_json["symbols"] if "USDT" in k["symbol"]]
-    logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
-    return usdt_symbols
-
 @logger.catch
 def start_web_socket(processData):
     """
     listen to websocket, populate postgresql with result
     """
-    import traceback
+    
 
-    coin_pairs = get_usdt_symbols()
+    coin_pairs = getClient().get_usdt_symbols()
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
@@ -151,7 +125,7 @@ def start_web_socket(processData):
         data = websocket_manager.pop_stream_data_from_stream_buffer()
         
         if data is False:
-            sleep(0.01)
+            time.sleep(0.01)
             continue
 
         elif data is None:
@@ -170,9 +144,3 @@ def start_web_socket(processData):
             logger.error(traceback.format_exc())
             websocket_manager.stop_manager_with_all_streams()
             exit(1)
-        
-
-if __name__ == "__main__":
-    # https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams
-    processData = ProcessData()
-    start_web_socket(processData)
