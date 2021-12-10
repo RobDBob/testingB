@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas_ta as ta
 from binanceHelper.bFinanceAPIFunctions import getClient
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
+from binanceHelper.BinanceClient import BinanceClient
 
 
 def get_datetime_single(date_time_stamp):
@@ -21,7 +22,8 @@ class ProcessData:
 
     ta_average_length = 60
 
-    def __init__(self):
+    def __init__(self, api_client: BinanceClient):
+        self.api_client = api_client
         self.full_klines_data = {}
         self.anomaly_detected_timestamp = {}
         
@@ -30,6 +32,7 @@ class ProcessData:
 
     def check_for_anomaly(self, symbol, data):
         if len(self.full_klines_data.get(symbol, [])) < self.ta_average_length:
+            self.full_klines_data["symbol"] = self.api_client.get_historical_klines(symbol, limit=self.ta_average_length)
             # logger.info(f"{symbol}: insufficient kline data, continue")
             return
 
@@ -54,7 +57,7 @@ class ProcessData:
             
             vol_msg = f"\nVOL: {volSMAValue_last_avg_value}->{data['volume']}({vol_pct_change})%"
             trades_msg  = f"\nNOT: {data['numberOfTrades']}->{number_of_trades_last_avg_value}({number_of_trades_pct_change})%"
-            logger.info(f"{symbol}: at ${data['close']}; {vol_msg}; {trades_msg}")
+            logger.info(f"{symbol}: at ${data['close']}; {vol_msg}; {trades_msg}\n")
             return True
         return False
 
@@ -63,14 +66,15 @@ class ProcessData:
         this method is the entry point with logic
         Save time stamp in seconds rather than miliseconds
         """
+        #  close       volume      timeStamp  numberOfTrades
 
         is_kline_complete = msg["data"]["k"]["x"]
         symbol = msg["data"]["s"]
         
         data = {
-            "timeStamp": msg["data"]["E"]/1000,
             "close": round(float(msg["data"]["k"]["c"]), 4), 
-            "volume": round(float(msg["data"]["k"]["v"]), 4), 
+            "volume": round(float(msg["data"]["k"]["v"]), 4),
+            "timeStamp": msg["data"]["E"]/1000,
             "numberOfTrades": msg["data"]["k"]["n"]}
 
         if is_kline_complete:
@@ -94,6 +98,8 @@ class ProcessData:
             self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.max_kline_storage_count)
 
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
+
+        # in addition
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)
 

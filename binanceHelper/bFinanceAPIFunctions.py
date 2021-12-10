@@ -1,4 +1,6 @@
 from loguru import logger
+from binanceHelper import const
+import pandas as pd
 import requests
 from pathlib import Path
 from os import path
@@ -23,25 +25,4 @@ def getBinanceConfig(test_net=False):
             "api_key": b_config["api_key"], 
             "api_secret": b_config["api_secret"]}
 
-class BinanceClient:
-    def __init__(self, testNet=False):
-        self.config = getBinanceConfig(testNet)
 
-    def get_exchange_info(self):
-        url = f"{self.config}/v3/exchangeInfo"
-        res = requests.get(url)
-        if not res.ok:
-            logger.error(f"Failed to get binance exchange info, status code: {res.status_code}")
-            raise
-        return res.json()
-
-    def get_usdt_symbols(self):
-        exchange_info = self.get_exchange_info()
-        all_symbols = exchange_info["symbols"]
-        usdt_symbols = [k["symbol"] for k in exchange_info["symbols"] if "USDT" in k["symbol"]]
-        logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
-        return usdt_symbols
-
-
-def getClient():
-    return BinanceClient()
