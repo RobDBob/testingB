@@ -31,7 +31,7 @@ class ProcessData:
 
     def check_for_anomaly(self, symbol, data):
         if len(self.full_klines_data.get(symbol, [])) < self.ta_average_length:
-            self.full_klines_data["symbol"] = self.api_client.get_historical_klines(symbol, limit=self.ta_average_length)
+            self.full_klines_data[symbol] = self.api_client.get_historical_klines(symbol, limit=self.ta_average_length)
             # logger.info(f"{symbol}: insufficient kline data, continue")
             return
 
