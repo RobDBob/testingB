@@ -32,6 +32,7 @@ class ProcessData:
     def check_for_anomaly(self, symbol, data):
         if len(self.full_klines_data.get(symbol, [])) < self.ta_average_length:
             self.full_klines_data[symbol] = self.api_client.get_historical_klines(symbol, limit=self.ta_average_length)
+            self.calculate_aditionals(symbol)
             # logger.info(f"{symbol}: insufficient kline data, continue")
             return
 
@@ -82,6 +83,10 @@ class ProcessData:
         if self.check_for_anomaly(symbol, data):
             self.record_trade(symbol, data)
 
+    def calculate_aditionals(self, symbol):
+        self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
+        self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)        
+
     def record_trade(self, symbol, data):
         # check if price is below 
         # {symbol: {buy:{time, price}, }}}
@@ -99,8 +104,7 @@ class ProcessData:
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
 
         # in addition
-        self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
-        self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)
+        self.calculate_aditionals(symbol)
 
 
 @logger.catch
