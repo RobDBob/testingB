@@ -78,19 +78,19 @@ class ProcessData:
         if self.check_for_anomaly(symbol, data):
             self.record_trade(symbol, data)
 
-        self.check_Trade_was_profitable(symbol, data)
+        self.check_trade_was_profitable(symbol, data)
 
     def calculate_aditionals(self, symbol):
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)        
 
     def record_trade(self, symbol, data):
-        self.transactions.record_purchase(self, symbol, data["eventTime"], data["close"])
+        self.transactions.record_purchase(symbol, data["eventTime"], data["close"])
         # check if price is below 
         # {symbol: {buy:{time, price}, }}}
         return
 
-    def check_Trade_was_profitable(self, symbol, data):
+    def check_trade_was_profitable(self, symbol, data):
         if symbol not in self.transactions.records:
             return
         
@@ -107,20 +107,20 @@ class ProcessData:
         # after 10min - emergency sell?
         emergency_sell_time = 10 * 60
         if purchase_time + emergency_sell_time < event_time :
-            logger.info(f"{symbol}: OUT OF TIME sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}")
+            logger.info(f"{symbol}: OUT OF TIME sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}\n")
             del(self.transactions.records[symbol])
 
         # stop loss, after 2min
         stop_loss_time = 2 * 60
         percentage_loss = 0.95
-        if (purchase_time + stop_loss_time < event_time) and (purchase_price * percentage_loss < current_price):
-            logger.info(f"{symbol}: STOP LOSS sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}")
+        if (purchase_time + stop_loss_time < event_time) and ( current_price < purchase_price * percentage_loss):
+            logger.info(f"{symbol}: STOP LOSS sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}\n")
             del(self.transactions.records[symbol])
 
         # good sell
         percentage_gain = 1.1
         if current_price > purchase_price * percentage_gain:
-            logger.info(f"{symbol}: GOOD sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}")
+            logger.info(f"{symbol}: GOOD sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}\n")
             del(self.transactions.records[symbol])
         
 
@@ -128,11 +128,11 @@ class ProcessData:
 
     def save_data(self, data, symbol):
         if symbol not in self.full_klines_data:
-            logger.debug(f"{symbol} - create new data frame for storage")
+            # logger.debug(f"{symbol} - create new data frame for storage")
             self.full_klines_data[symbol] = pd.DataFrame()
 
         if len(self.full_klines_data[symbol]) > ( self.max_kline_storage_count * 1.5) :
-            logger.debug(f"{symbol} - trimming data down to {self.max_kline_storage_count}")
+            # logger.debug(f"{symbol} - trimming data down to {self.max_kline_storage_count}")
             self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.max_kline_storage_count)
 
         self.full_klines_data[symbol]=self.full_klines_data[symbol].append(data, ignore_index=True)
@@ -155,9 +155,7 @@ def start_web_socket(processData):
         time_stamp = int(time.time())
         if (time_stamp%900 == 0 and previous_time_stamp < time_stamp):
             # health check
-            logger.info("HEALTH CHECK")
-            logger.info(f"Stored coin number: {len(processData.full_klines_data)}")
-            logger.info(f"Stored coin number entries (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}")
+            logger.info(f"HEALTH CHECK --- Stored coin number: {len(processData.full_klines_data)}, (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}")
             previous_time_stamp = time_stamp
 
         if websocket_manager.is_manager_stopping():
@@ -178,7 +176,7 @@ def start_web_socket(processData):
             continue
 
         try:
-            processData.process_msg(data)
+            processData.deal_with_it(data)
 
         except Exception:
             logger.error(f"last kline: {data}")
