@@ -2,14 +2,11 @@ import traceback
 import time
 import pandas as pd
 from loguru import logger
-from datetime import datetime
 import pandas_ta as ta
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
 from binanceHelper.BinanceClient import BinanceClient
-
-
-def get_datetime_single(date_time_stamp):
-    return datetime.utcfromtimestamp((int(date_time_stamp))).strftime('%Y-%m-%d %H:%M:%S')
+from Helpers.DateHelper import get_datetime_single
+from BlackBoxScripts.RecordedActions import RecordedActions
 
 class ProcessData:
     vol_increase_x = 15
@@ -22,10 +19,10 @@ class ProcessData:
     def __init__(self, api_client: BinanceClient):
         self.api_client = api_client
         self.full_klines_data = {}
-        self.anomaly_detected_timestamp = {}
+        self.anomaly_detected_eventTime = {}
         
         # watch for price change, used to estimate accuracy
-        self.trade_record = {}
+        self.transactions = RecordedActions()
 
     def check_for_anomaly(self, symbol, data):
         if len(self.full_klines_data.get(symbol, [])) < self.ta_average_length:
@@ -35,8 +32,8 @@ class ProcessData:
             return
 
         # check if already was hinted
-        if symbol in self.anomaly_detected_timestamp and self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification > data["timeStamp"]:
-            # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_timestamp[symbol] + self.back_off_after_notification}")
+        if symbol in self.anomaly_detected_eventTime and self.anomaly_detected_eventTime[symbol] + self.back_off_after_notification > data["eventTime"]:
+            # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_eventTime[symbol] + self.back_off_after_notification}")
             return False
 
         symbol_data = self.full_klines_data.get(symbol, None)
@@ -48,7 +45,7 @@ class ProcessData:
         number_of_trades_last_avg_value = round(float(symbol_data.tail(1)["NOTSMA"].values[0]), 4)
 
         if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]) and (number_of_trades_last_avg_value * self.not_increase_x < data["numberOfTrades"]):
-            self.anomaly_detected_timestamp[symbol] = data["timeStamp"]
+            self.anomaly_detected_eventTime[symbol] = data["eventTime"]
             
             vol_pct_change = round((data["volume"]/volSMAValue_last_avg_value)*100, 4)
             number_of_trades_pct_change = round((float(data["numberOfTrades"]/number_of_trades_last_avg_value))*100, 4)
@@ -59,21 +56,21 @@ class ProcessData:
             return True
         return False
 
-    def process_msg(self, msg):
+    def deal_with_it(self, incoming):
         """
         this method is the entry point with logic
         Save time stamp in seconds rather than miliseconds
         """
-        #  close       volume      timeStamp  numberOfTrades
+        #  close       volume      eventTime  numberOfTrades
 
-        is_kline_complete = msg["data"]["k"]["x"]
-        symbol = msg["data"]["s"]
+        is_kline_complete = incoming["data"]["k"]["x"]
+        symbol = incoming["data"]["s"]
         
         data = {
-            "close": round(float(msg["data"]["k"]["c"]), 4), 
-            "volume": round(float(msg["data"]["k"]["v"]), 4),
-            "timeStamp": msg["data"]["E"]/1000,
-            "numberOfTrades": msg["data"]["k"]["n"]}
+            "close": round(float(incoming["data"]["k"]["c"]), 4), 
+            "volume": round(float(incoming["data"]["k"]["v"]), 4),
+            "eventTime": incoming["data"]["E"]/1000,
+            "numberOfTrades": incoming["data"]["k"]["n"]}
 
         if is_kline_complete:
             self.save_data(data, symbol)
@@ -81,14 +78,53 @@ class ProcessData:
         if self.check_for_anomaly(symbol, data):
             self.record_trade(symbol, data)
 
+        self.check_Trade_was_profitable(symbol, data)
+
     def calculate_aditionals(self, symbol):
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)        
 
     def record_trade(self, symbol, data):
+        self.transactions.record_purchase(self, symbol, data["eventTime"], data["close"])
         # check if price is below 
         # {symbol: {buy:{time, price}, }}}
         return
+
+    def check_Trade_was_profitable(self, symbol, data):
+        if symbol not in self.transactions.records:
+            return
+        
+        # what time lapse we are interested in
+        # what percentage increase we are interested in
+        # the moment it increases by 5% - sell
+        # if it does not increase within 1hr - mark it as failed invest
+        # stop loss? - 5% ??
+        event_time = data["eventTime"] # in seconds
+        current_price = data["close"]
+        (purchase_time, purchase_price) = self.transactions.records[symbol]
+
+
+        # after 10min - emergency sell?
+        emergency_sell_time = 10 * 60
+        if purchase_time + emergency_sell_time < event_time :
+            logger.info(f"{symbol}: OUT OF TIME sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}")
+            del(self.transactions.records[symbol])
+
+        # stop loss, after 2min
+        stop_loss_time = 2 * 60
+        percentage_loss = 0.95
+        if (purchase_time + stop_loss_time < event_time) and (purchase_price * percentage_loss < current_price):
+            logger.info(f"{symbol}: STOP LOSS sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}")
+            del(self.transactions.records[symbol])
+
+        # good sell
+        percentage_gain = 1.1
+        if current_price > purchase_price * percentage_gain:
+            logger.info(f"{symbol}: GOOD sell, purchase price: {purchase_price}, sell price {current_price}, diff {current_price-purchase_price}")
+            del(self.transactions.records[symbol])
+        
+
+
 
     def save_data(self, data, symbol):
         if symbol not in self.full_klines_data:
