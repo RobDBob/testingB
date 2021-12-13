@@ -11,8 +11,6 @@ from binanceHelper.BinanceClient import BinanceClient
 def get_datetime_single(date_time_stamp):
     return datetime.utcfromtimestamp((int(date_time_stamp))).strftime('%Y-%m-%d %H:%M:%S')
 
-logger.add("LOG_binance_notification.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
-
 class ProcessData:
     vol_increase_x = 15
     not_increase_x = 15
