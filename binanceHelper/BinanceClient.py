@@ -7,6 +7,8 @@ from loguru import logger
 
 logger.add("LOG_api.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
 
+symbols_to_ignore = []
+
 class BinanceClient:
     def __init__(self, testNet=False):
         self.config = getBinanceConfig(logger, testNet)
@@ -44,6 +46,6 @@ class BinanceClient:
     def get_usdt_symbols(self):
         exchange_info = self.get_exchange_info()
         all_symbols = exchange_info["symbols"]
-        usdt_symbols = [k["symbol"] for k in exchange_info["symbols"] if "USDT" in k["symbol"]]
+        usdt_symbols = [k["symbol"] for k in exchange_info["symbols"] if "USDT" in k["symbol"] and not ("DOWNUSDT" in k["symbol"] or "UPUSDT" in k["symbol"] )]
         logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
         return usdt_symbols

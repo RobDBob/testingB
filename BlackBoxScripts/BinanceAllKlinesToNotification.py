@@ -52,11 +52,11 @@ class ProcessData:
         if (volSMAValue_last_avg_value * self.vol_increase_x < data["volume"]) and (number_of_trades_last_avg_value * self.not_increase_x < data["numberOfTrades"]):
             self.anomaly_detected_timestamp[symbol] = data["timeStamp"]
             
-            vol_pct_change = round((volSMAValue_last_avg_value/data["volume"])*100, 4)
-            number_of_trades_pct_change = round((float(number_of_trades_last_avg_value)/data["numberOfTrades"])*100, 4)
+            vol_pct_change = round((data["volume"]/volSMAValue_last_avg_value)*100, 4)
+            number_of_trades_pct_change = round((float(data["numberOfTrades"]/number_of_trades_last_avg_value))*100, 4)
             
             vol_msg = f"\nVOL: {volSMAValue_last_avg_value}->{data['volume']}({vol_pct_change})%"
-            trades_msg  = f"\nNOT: {data['numberOfTrades']}->{number_of_trades_last_avg_value}({number_of_trades_pct_change})%"
+            trades_msg  = f"\nNOT: {number_of_trades_last_avg_value}->{data['numberOfTrades']}({number_of_trades_pct_change})%"
             logger.info(f"{symbol}: at ${data['close']}; {vol_msg}; {trades_msg}\n")
             return True
         return False
