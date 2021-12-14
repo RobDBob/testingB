@@ -4,7 +4,7 @@ from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import 
 from loguru import logger
 from BlackBoxScripts.BinanceAllKlinesToNotification import ProcessData
 from binanceHelper.BinanceClient import BinanceClient
-from binanceHelper.SamBinanceClient import AsyncClient
+# from binanceHelper.SamBinanceClient import AsyncClient
 
 
 @logger.catch
