@@ -4,6 +4,7 @@ from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import 
 from loguru import logger
 from BlackBoxScripts.BinanceAllKlinesToNotification import ProcessData
 from binanceHelper.BinanceClient import BinanceClient
+from binanceHelper.SamBinanceClient import AsyncClient
 
 
 @logger.catch
@@ -53,7 +54,8 @@ if __name__ == "__main__":
     # https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams
 
     logger.add("LOG_run_klines_notifications.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
-
-    b_client = BinanceClient()
+    testNet = False
+    b_client = BinanceClient(testNet)
+    # b_client = AsyncClient(testNet)
     processData = ProcessData(b_client)
     start_web_socket(processData)

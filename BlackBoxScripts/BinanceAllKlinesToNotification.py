@@ -28,7 +28,7 @@ class ProcessData:
             return False
 
         symbol_kline_data = self.full_klines_data.get(symbol, None)
-        if symbol_kline_data:
+        if symbol_kline_data is not None:
             return self.anomaly_checker.check_activity_increased(symbol, symbol_kline_data, symbol_ticker_data)
         return False
 
@@ -41,6 +41,9 @@ class ProcessData:
         symbol = incoming_message["data"]["s"]
         
         data = {
+            "high": round(float(incoming_message["data"]["k"]["l"]), 4), 
+            "low": round(float(incoming_message["data"]["k"]["h"]), 4), 
+            "open": round(float(incoming_message["data"]["k"]["o"]), 4), 
             "close": round(float(incoming_message["data"]["k"]["c"]), 4), 
             "volume": round(float(incoming_message["data"]["k"]["v"]), 4),
             "eventTime": incoming_message["data"]["E"]/1000,
@@ -52,17 +55,28 @@ class ProcessData:
         if self.check_for_anomaly(symbol, data):
             self.record_trade(symbol, data)
 
-        self.transactions.check_trade_was_profitable(symbol, data)
+        self.check_trade(symbol, data)
+        
 
     def add_ta_analysis(self, symbol):
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)        
 
-    def record_trade(self, symbol, data):
-        self.transactions.record_purchase(symbol, data["eventTime"], data["close"])
+    def record_trade(self, symbol, tick_data):
+        order_book = self.api_client.get_order_book(symbol)
+        asks = [float(k[0]) for k in order_book["asks"]]
+        self.transactions.record_purchase(symbol, tick_data, ( min(asks),  max(asks)))
         # check if price is below 
         # {symbol: {buy:{time, price}, }}}
         return
+
+    def check_trade(self, symbol, data):
+        if symbol not in self.transactions.records:
+            return
+        
+        order_book = self.api_client.get_order_book(symbol)
+        bids = [float(k[0]) for k in order_book["bids"]]
+        self.transactions.check_trade_was_profitable(symbol, data, bids)
         
     def save_data(self, data, symbol):
         # add new data

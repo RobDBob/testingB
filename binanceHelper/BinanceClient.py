@@ -35,6 +35,9 @@ class BinanceClient:
         # # as timestamp is returned in ms, let us convert this back to proper timestamps.
         # df.set_index('timeStamp', drop=False, inplace=True)
         # df.timeStamp = pd.to_datetime(df.timeStamp, unit='ms').dt.strftime(const.date_time_format)
+        df["high"] = df.high.astype("float")
+        df["low"] = df.low.astype("float")
+        df["open"] = df.open.astype("float")
         df["close"] = df.close.astype("float")
         df["volume"] = df.volume.astype("float")
         df["timeStamp"] = (df.timeStamp/1000).astype("int64")
@@ -46,3 +49,12 @@ class BinanceClient:
         usdt_symbols = [k["symbol"] for k in exchange_info["symbols"] if "USDT" in k["symbol"] and not ("DOWNUSDT" in k["symbol"] or "UPUSDT" in k["symbol"] )]
         logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
         return usdt_symbols
+
+    def get_order_book(self, symbol, limit=50):
+        url = f"{self.config['url']}/v3/depth?symbol={symbol}&limit={limit}"
+        res = requests.get(url)
+        if not res.ok:
+            logger.error(f"Failed to get order books, status code: {res.status_code}")
+            raise
+        return res.json()
+
