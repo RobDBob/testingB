@@ -8,7 +8,12 @@ class AnomalyChecker:
         
         self.anomaly_detected_eventTime = {}
         
-    def check(self, symbol, symbol_kline_data, symbol_tick_data):
+    def _get_pct_change(self, tick_data, average_data):
+        if average_data > 0:
+            return round((tick_data/average_data)*100, 4)
+        return 0
+        
+    def check_activity_increased(self, symbol, symbol_kline_data, symbol_tick_data):
         volSMAValue_last_avg_value = round(float(symbol_kline_data.tail(1)["volSMA"].values[0]), 4)
         number_of_trades_last_avg_value = round(float(symbol_kline_data.tail(1)["NOTSMA"].values[0]), 4)
         
@@ -18,8 +23,8 @@ class AnomalyChecker:
         if volume_increased and number_of_trades_increased:
             self.anomaly_detected_eventTime[symbol] = symbol_tick_data["eventTime"]
             
-            vol_pct_change = round((symbol_tick_data["volume"]/volSMAValue_last_avg_value)*100, 4)
-            number_of_trades_pct_change = round((float(symbol_tick_data["numberOfTrades"]/number_of_trades_last_avg_value))*100, 4)
+            vol_pct_change = self._get_pct_change(symbol_tick_data["volume"], volSMAValue_last_avg_value)
+            number_of_trades_pct_change = self._get_pct_change(symbol_tick_data["numberOfTrades"], number_of_trades_last_avg_value)
             
             vol_msg = f"\nVOL: {volSMAValue_last_avg_value}->{symbol_tick_data['volume']}({vol_pct_change})%"
             trades_msg  = f"\nNOT: {number_of_trades_last_avg_value}->{symbol_tick_data['numberOfTrades']}({number_of_trades_pct_change})%"

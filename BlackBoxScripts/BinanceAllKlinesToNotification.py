@@ -1,9 +1,8 @@
-import traceback
-import time
+
 import pandas as pd
 from loguru import logger
 import pandas_ta as ta
-from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
+
 from binanceHelper.BinanceClient import BinanceClient
 from Helpers.DateHelper import get_datetime_single
 from BlackBoxScripts.TransactionManager import TransactionManager
@@ -30,7 +29,7 @@ class ProcessData:
 
         symbol_kline_data = self.full_klines_data.get(symbol, None)
         if symbol_kline_data:
-            return self.anomaly_checker.check(symbol, symbol_kline_data, symbol_ticker_data)
+            return self.anomaly_checker.check_activity_increased(symbol, symbol_kline_data, symbol_ticker_data)
         return False
 
     def process_websocket_data(self, incoming_message):
@@ -38,8 +37,6 @@ class ProcessData:
         this method is the entry point with logic
         Save time stamp in seconds rather than miliseconds
         """
-        #  close volume eventTime  numberOfTrades
-
         is_kline_complete = incoming_message["data"]["k"]["x"]
         symbol = incoming_message["data"]["s"]
         
@@ -80,47 +77,3 @@ class ProcessData:
 
         self.full_klines_data[symbol] = self.full_klines_data[symbol].append(data, ignore_index=True)
         self.add_ta_analysis(symbol)
-
-
-@logger.catch
-def start_web_socket(processData):
-    """
-    listen to websocket, populate postgresql with result
-    """
-    coin_pairs = processData.api_client.get_usdt_symbols()
-    websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
-    websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
-    
-    previous_time_stamp = 0
-    while True:
-        time_stamp = int(time.time())
-        if (time_stamp%900 == 0 and previous_time_stamp < time_stamp):
-            # health check
-            logger.info(f"HEALTH CHECK --- Stored coin number: {len(processData.full_klines_data)}, (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}")
-            previous_time_stamp = time_stamp
-
-        if websocket_manager.is_manager_stopping():
-            exit(0)
-
-        data = websocket_manager.pop_stream_data_from_stream_buffer()
-        
-        if data is False:
-            time.sleep(0.01)
-            continue
-
-        elif data is None:
-            continue
-
-        elif data.get("result", 1) is None:
-            # odd case at the start when no result is given
-            # dict: {'result': None, 'id': 1}
-            continue
-
-        try:
-            processData.process_websocket_data(data)
-
-        except Exception:
-            logger.error(f"last kline: {data}")
-            logger.error(traceback.format_exc())
-            websocket_manager.stop_manager_with_all_streams()
-            exit(1)
