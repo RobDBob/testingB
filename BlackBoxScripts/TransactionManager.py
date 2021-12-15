@@ -25,15 +25,15 @@ class TransactionManager:
         
         purchase_time = recorded_tick["eventTime"]
         
-        tick_prices = f'H:{tick_data["high"]}, L:{tick_data["low"]}, O:{tick_data["open"]}, C:{tick_data["close"]}'
-        pruchase_prices = f'H:{recorded_tick["high"]}, L:{recorded_tick["low"]}, O:{recorded_tick["open"]}, C:{recorded_tick["close"]}'
+        tick_prices =     f'Want S: H:{tick_data["high"]}, L:{tick_data["low"]}, O:{tick_data["open"]}, C:{tick_data["close"]}'
+        pruchase_prices = f'Bought: H:{recorded_tick["high"]}, L:{recorded_tick["low"]}, O:{recorded_tick["open"]}, C:{recorded_tick["close"]}'
 
         # after 10min - emergency sell?
         emergency_sell_time = 10 * 60
         if purchase_time + emergency_sell_time < tick_event_time :
-            logger.info(f"\n{symbol}: OUT OF TIME sell \n {tick_prices} \n {pruchase_prices}")
+            logger.info(f"{symbol}: OUT OF TIME sell \n {tick_prices} \n {pruchase_prices}")
             logger.info(f"{symbol}: bids: {bids}\n")
-            logger.info(f"{symbol}: bids: {self.records[symbol]['asks']}\n")
+            logger.info(f"{symbol}: asks: {self.records[symbol]['asks']}\n")
 
             del(self.records[symbol])
 

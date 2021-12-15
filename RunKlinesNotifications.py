@@ -21,7 +21,7 @@ def start_web_socket(processData:ProcessData):
         time_stamp = int(time.time())
         if (time_stamp%900 == 0 and previous_time_stamp < time_stamp):
             # health check
-            logger.info(f"HEALTH CHECK --- Stored coin number: {len(processData.full_klines_data)}, (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}")
+            logger.info(f"\nHEALTH CHECK --- Stored coin number: {len(processData.full_klines_data)}, (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}\n")
             previous_time_stamp = time_stamp
 
         if websocket_manager.is_manager_stopping():

@@ -41,8 +41,8 @@ class ProcessData:
         symbol = incoming_message["data"]["s"]
         
         data = {
-            "high": round(float(incoming_message["data"]["k"]["l"]), 4), 
-            "low": round(float(incoming_message["data"]["k"]["h"]), 4), 
+            "high": round(float(incoming_message["data"]["k"]["h"]), 4), 
+            "low": round(float(incoming_message["data"]["k"]["l"]), 4), 
             "open": round(float(incoming_message["data"]["k"]["o"]), 4), 
             "close": round(float(incoming_message["data"]["k"]["c"]), 4), 
             "volume": round(float(incoming_message["data"]["k"]["v"]), 4),
@@ -76,7 +76,7 @@ class ProcessData:
         
         order_book = self.api_client.get_order_book(symbol)
         bids = [float(k[0]) for k in order_book["bids"]]
-        self.transactions.check_trade_was_profitable(symbol, data, bids)
+        self.transactions.check_trade_was_profitable(symbol, data, ( min(bids),  max(bids)))
         
     def save_data(self, data, symbol):
         # add new data
