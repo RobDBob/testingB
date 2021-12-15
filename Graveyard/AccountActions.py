@@ -1,6 +1,6 @@
 from time import time
 import argparse
-from binanceHelper.bFinanceAPIFunctions import getClient
+from Network.APIFunctions import getClient
 import pprint
 
 

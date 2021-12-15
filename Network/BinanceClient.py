@@ -2,7 +2,7 @@ from loguru import logger
 from binanceHelper import const
 import pandas as pd
 import requests
-from binanceHelper.bFinanceAPIFunctions import getBinanceConfig
+from Network.APIFunctions import getBinanceConfig
 
 symbols_to_ignore = []
 

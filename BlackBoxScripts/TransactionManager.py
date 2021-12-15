@@ -31,9 +31,9 @@ class TransactionManager:
         # after 10min - emergency sell?
         emergency_sell_time = 10 * 60
         if purchase_time + emergency_sell_time < tick_event_time :
-            logger.info(f"{symbol}: OUT OF TIME sell \n {tick_prices} \n {pruchase_prices}")
+            logger.info(f"{symbol}: ============ : OUT OF TIME sell \n {pruchase_prices} \n {tick_prices}")
+            logger.info(f"{symbol}: asks: {self.records[symbol]['asks']}")
             logger.info(f"{symbol}: bids: {bids}\n")
-            logger.info(f"{symbol}: asks: {self.records[symbol]['asks']}\n")
 
             del(self.records[symbol])
 

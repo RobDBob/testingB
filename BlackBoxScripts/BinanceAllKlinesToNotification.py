@@ -3,24 +3,17 @@ import pandas as pd
 from loguru import logger
 import pandas_ta as ta
 
-from binanceHelper.BinanceClient import BinanceClient
-from Helpers.DateHelper import get_datetime_single
+from Network.BinanceClient import BinanceClient
 from BlackBoxScripts.TransactionManager import TransactionManager
 from BlackBoxScripts.AnomalyChecker import AnomalyChecker
 
 class ProcessData:
-    # run configuration
-    vol_increase_x = 15
-    not_increase_x = 15
-    back_off_after_notification = 3600
-    max_kline_storage_count = 360
-    ta_average_length = 60
-
-    def __init__(self, api_client: BinanceClient):
+    def __init__(self, api_client: BinanceClient, run_config:dict):
+        self.run_config = run_config
         self.api_client = api_client
         self.full_klines_data = {}
         
-        self.anomaly_checker = AnomalyChecker(self.vol_increase_x, self.not_increase_x, self.back_off_after_notification)
+        self.anomaly_checker = AnomalyChecker(self.run_config)
         self.transactions = TransactionManager()
 
     def check_for_anomaly(self, symbol, symbol_ticker_data):
@@ -59,8 +52,8 @@ class ProcessData:
         
 
     def add_ta_analysis(self, symbol):
-        self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.ta_average_length)
-        self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.ta_average_length)        
+        self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.run_config["ta_average_length"])
+        self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.run_config["ta_average_length"])        
 
     def record_trade(self, symbol, tick_data):
         order_book = self.api_client.get_order_book(symbol)
@@ -82,12 +75,12 @@ class ProcessData:
         # add new data
         if symbol not in self.full_klines_data:
             # logger.debug(f"{symbol} - create new data frame for storage")
-            self.full_klines_data[symbol] = self.api_client.get_historical_klines(symbol, limit=self.ta_average_length)
+            self.full_klines_data[symbol] = self.api_client.get_historical_klines(symbol, limit=self.run_config["ta_average_length"])
 
         # get rid of old data
-        if len(self.full_klines_data[symbol]) > ( self.max_kline_storage_count * 1.5) :
-            # logger.debug(f"{symbol} - trimming data down to {self.max_kline_storage_count}")
-            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.max_kline_storage_count)
+        if len(self.full_klines_data[symbol]) > ( self.run_config["max_kline_storage_count"] * 1.5) :
+            # logger.debug(f"{symbol} - trimming data down to {self.run_config['max_kline_storage_count']}")
+            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.run_config["max_kline_storage_count"])
 
         self.full_klines_data[symbol] = self.full_klines_data[symbol].append(data, ignore_index=True)
         self.add_ta_analysis(symbol)

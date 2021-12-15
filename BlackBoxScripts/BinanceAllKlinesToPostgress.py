@@ -2,7 +2,7 @@ import psycopg2
 import logging
 from binance import enums
 from binance import ThreadedWebsocketManager
-from binanceHelper.bFinanceAPIFunctions import getClient
+from Network.APIFunctions import getClient
 from time import sleep
 
 GET_TABLES_QUERY = "SELECT * FROM information_schema.tables where table_schema = 'public';"
