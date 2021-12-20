@@ -6,6 +6,7 @@ import pandas_ta as ta
 from Network.BinanceClient import BinanceClient
 from BlackBoxScripts.TransactionManager import TransactionManager
 from BlackBoxScripts.AnomalyChecker import AnomalyChecker
+from Helpers.DBProgresSaver import DBProgresSaver
 
 class ProcessData:
     def __init__(self, api_client: BinanceClient, run_config:dict):
@@ -15,6 +16,7 @@ class ProcessData:
         
         self.anomaly_checker = AnomalyChecker(self.run_config)
         self.transactions = TransactionManager()
+        self.db_saver = DBProgresSaver()
 
     def check_for_anomaly(self, symbol, symbol_ticker_data):
         if self.anomaly_checker.anomaly_already_detected_for_symbol(symbol, symbol_ticker_data["eventTime"]):
@@ -43,7 +45,8 @@ class ProcessData:
             "numberOfTrades": incoming_message["data"]["k"]["n"]}
 
         if is_kline_complete:
-            self.save_data(data, symbol)
+            self.save_data_in_memory(data, symbol)
+            self.db_saver.save_data_to_db(data, symbol)
                     
         if self.check_for_anomaly(symbol, data):
             self.record_trade(symbol, data)
@@ -71,7 +74,7 @@ class ProcessData:
         bids = [float(k[0]) for k in order_book["bids"]]
         self.transactions.check_trade_was_profitable(symbol, data, ( min(bids),  max(bids)))
         
-    def save_data(self, data, symbol):
+    def save_data_in_memory(self, data, symbol):
         # add new data
         if symbol not in self.full_klines_data:
             # logger.debug(f"{symbol} - create new data frame for storage")

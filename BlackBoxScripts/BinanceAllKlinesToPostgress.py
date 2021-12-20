@@ -4,6 +4,7 @@ from binance import enums
 from binance import ThreadedWebsocketManager
 from Network.APIFunctions import getClient
 from time import sleep
+from Helpers.DBFunctions import execute_query
 
 GET_TABLES_QUERY = "SELECT * FROM information_schema.tables where table_schema = 'public';"
 CREATE_TABLE_QUERY = "CREATE TABLE public.{0} (timestamp int PRIMARY KEY,close decimal,volume decimalc,numberOfTrades decimal,takerBaseVolume decimal,takerQuoteVolume decimal);"
@@ -20,35 +21,10 @@ CREATE_TABLE_QUERY = "CREATE TABLE public.{0} (timestamp int PRIMARY KEY,close d
 # logger = create_logger(__name__, "LOG_binancealltickers.log")
 
 config = {"host": "localhost",
-        "port":5555,
-        "database":"testdb",
-        "user":"postgres",
-        "password":"postgres"}
-
-def execute_query(sql, fetch=False):
-    """ Connect to the PostgreSQL database server """
-    conn = None
-    try:
-        conn = psycopg2.connect(**config)
-        with conn:
-            with conn.cursor() as curs:
-                curs.execute(sql)
-                conn.commit()
-                if fetch:
-                    return curs.fetchall()
-
-    except psycopg2.errors.InFailedSqlTransaction:
-        with conn:
-            with conn.cursor() as curs:
-                curs.execute("ROLLBACK")
-                conn.commit()
-
-    except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
-
-    finally:
-        if conn is not None:
-            conn.close()
+        "port": 5432,
+        "database": "testdb",
+        "user": "postgres",
+        "password": "postgres"}
 
 class ProcessData:
     query_result_table_name_index = 2

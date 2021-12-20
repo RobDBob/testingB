@@ -12,30 +12,24 @@ config = {"host":"192.168.1.34",
 
 def execute_query(sql, fetch=False, callback=None):
     """ Connect to the PostgreSQL database server """
+    conn = None
     try:
         conn = psycopg2.connect(**config)
         with conn:
+            with conn.cursor() as curs:
+                curs.execute(sql)
+                conn.commit()
+                if fetch:
+                    return curs.fetchall()
 
-            try:
-                with conn.cursor() as curs:
-                    curs.execute(sql)
-                    conn.commit()
-                    if fetch:
-                        # callback with 100 rows at the time
-                        if callback:
-                            callback(iter_row(curs, 100))
-                        else:
-                            return curs.fetchall()
-    
-            except psycopg2.errors.InFailedSqlTransaction:
-                logger.error(f"Rollback transaction: {sql}")
-                with conn:
-                    with conn.cursor() as curs:
-                        curs.execute("ROLLBACK")
-                        conn.commit()
+    except psycopg2.errors.InFailedSqlTransaction:
+        with conn:
+            with conn.cursor() as curs:
+                curs.execute("ROLLBACK")
+                conn.commit()
 
     except (Exception, psycopg2.DatabaseError) as error:
-        logger.error(error)
+        print(error)
 
     finally:
         if conn is not None:
@@ -48,10 +42,6 @@ def iter_row(curs, size=10):
             break
         for row in rows:
             yield row
-
-def print_stuff(data_rows):
-    print(len(list(data_rows)))
-    print("_______________________")
 
 def get_first_record():
     sql_select_first_record = 'SELECT * FROM "bpricesBTCUSDT" FETCH FIRST 1 ROW ONLY;'
