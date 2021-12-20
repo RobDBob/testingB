@@ -1,8 +1,6 @@
 import psycopg2
 from Helpers.DateHelper import get_datetime_single_from_ms
-from Helpers.GetLogger import create_logger
-
-logger = create_logger(__name__, "LOG_DBFunctions.log")
+from loguru import logger
 
 config = {"host":"192.168.1.34",
         "port":5555,
@@ -29,7 +27,7 @@ def execute_query(sql, fetch=False, callback=None):
                 conn.commit()
 
     except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
+        logger.error(error)
 
     finally:
         if conn is not None:

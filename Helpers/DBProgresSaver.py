@@ -1,5 +1,6 @@
 from time import sleep
 from Helpers.DBFunctions import execute_query
+from loguru import logger
 
 GET_TABLES_QUERY = "SELECT * FROM information_schema.tables where table_schema = 'public';"
 CREATE_TABLE_QUERY = "CREATE TABLE public.{0} (timestamp int PRIMARY KEY,high decimal,low decimal,open decimal,close decimal,volume decimal,numberOfTrades decimal);"
