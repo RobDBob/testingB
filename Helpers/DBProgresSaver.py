@@ -1,26 +1,8 @@
 from time import sleep
 from Helpers.DBFunctions import execute_query
-from loguru import logger
 
 GET_TABLES_QUERY = "SELECT * FROM information_schema.tables where table_schema = 'public';"
 CREATE_TABLE_QUERY = "CREATE TABLE public.{0} (timestamp int PRIMARY KEY,high decimal,low decimal,open decimal,close decimal,volume decimal,numberOfTrades decimal);"
-
-# def create_logger(logger_name, file_name=None):
-#     logger = logging.getLogger(logger_name)
-#     logger.setLevel(logging.DEBUG)
-#     file_handler = logging.FileHandler(file_name)
-#     formatter    = logging.Formatter('%(asctime)s(%(levelname)s): %(message)s')
-#     file_handler.setFormatter(formatter)
-#     logger.addHandler(file_handler)
-#     return logging.getLogger(logger_name)
-
-# logger = create_logger(__name__, "LOG_binancealltickers.log")
-
-config = {"host": "localhost",
-        "port": 5432,
-        "database": "testdb",
-        "user": "postgres",
-        "password": "postgres"}
 
 class DBProgresSaver:
     query_result_table_name_index = 2

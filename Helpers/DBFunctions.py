@@ -2,11 +2,11 @@ import psycopg2
 from Helpers.DateHelper import get_datetime_single_from_ms
 from loguru import logger
 
-config = {"host":"192.168.1.34",
-        "port":5555,
-        "database":"testdb",
-        "user":"postgres",
-        "password":"postgres"}
+config = {"host": "localhost",
+        "port": 5432,
+        "database": "testdb",
+        "user": "postgres",
+        "password": "postgres"}
 
 def execute_query(sql, fetch=False, callback=None):
     """ Connect to the PostgreSQL database server """
