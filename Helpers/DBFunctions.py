@@ -2,9 +2,9 @@ import psycopg2
 from Helpers.DateHelper import get_datetime_single_from_ms
 from loguru import logger
 
-config = {"host": "localhost",
+config = {"host": "192.168.1.34",
         "port": 5432,
-        "database": "testdb",
+        "database": "dbtest",
         "user": "postgres",
         "password": "postgres"}
 

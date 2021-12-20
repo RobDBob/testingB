@@ -47,6 +47,6 @@ class DBProgresSaver:
         expected_table_name = f"kline_{symbol.lower()}"
 
         if self.make_sure_table_exists(expected_table_name):
-            values = f"{data['klineEndTime']}, {data['close']}, {data['high']},  {data['low']},  {data['open']},  {data['close']}, {data['numberOfTrades']}"
+            values = f"{data['eventTime']}, {data['close']}, {data['high']},  {data['low']},  {data['open']},  {data['close']}, {data['numberOfTrades']}"
             sql_query = f'INSERT INTO "{expected_table_name}" (timestamp,high,low,open,close,volume,numberOfTrades) VALUES ({values})'
             execute_query(sql_query)
