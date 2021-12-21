@@ -18,13 +18,13 @@ class ProcessData:
         self.transactions = TransactionManager()
         self.db_saver = DBProgresSaver()
 
-    def check_for_anomaly(self, symbol, symbol_ticker_data):
-        if self.anomaly_checker.anomaly_already_detected_for_symbol(symbol, symbol_ticker_data["eventTime"]):
+    def check_for_anomaly(self, tick_data, symbol):
+        if self.anomaly_checker.anomaly_already_detected_for_symbol(symbol, tick_data["eventTime"]):
             return False
 
-        symbol_kline_data = self.full_klines_data.get(symbol, None)
-        if symbol_kline_data is not None:
-            return self.anomaly_checker.check_activity_increased(symbol, symbol_kline_data, symbol_ticker_data)
+        historic_tick_data = self.full_klines_data.get(symbol, None)
+        if historic_tick_data is not None:
+            return self.anomaly_checker.check_activity_increased(historic_tick_data, tick_data, symbol)
         return False
 
     def process_websocket_data(self, incoming_message):
@@ -35,7 +35,7 @@ class ProcessData:
         is_kline_complete = incoming_message["data"]["k"]["x"]
         symbol = incoming_message["data"]["s"]
         
-        data = {
+        tick_data = {
             "high": round(float(incoming_message["data"]["k"]["h"]), 4), 
             "low": round(float(incoming_message["data"]["k"]["l"]), 4), 
             "open": round(float(incoming_message["data"]["k"]["o"]), 4), 
@@ -45,20 +45,20 @@ class ProcessData:
             "numberOfTrades": incoming_message["data"]["k"]["n"]}
 
         if is_kline_complete:
-            self.save_data_in_memory(data, symbol)
-            self.db_saver.save_data_to_db(data, symbol)
+            self.save_data_in_memory(tick_data, symbol)
+            self.db_saver.save_data_to_db(tick_data, symbol)
                     
-        if self.check_for_anomaly(symbol, data):
-            self.record_trade(symbol, data)
+        if self.check_for_anomaly(tick_data, symbol):
+            self.record_trade(tick_data, symbol)
 
-        self.check_trade(symbol, data)
+        self.check_trade(tick_data, symbol)
         
 
     def add_ta_analysis(self, symbol):
         self.full_klines_data[symbol]["volSMA"]=ta.sma(self.full_klines_data[symbol].volume, length=self.run_config["ta_average_length"])
         self.full_klines_data[symbol]["NOTSMA"]=ta.sma(self.full_klines_data[symbol].numberOfTrades, length=self.run_config["ta_average_length"])        
 
-    def record_trade(self, symbol, tick_data):
+    def record_trade(self, tick_data, symbol):
         order_book = self.api_client.get_order_book(symbol)
         asks = [float(k[0]) for k in order_book["asks"]]
         self.transactions.record_purchase(symbol, tick_data, ( min(asks),  max(asks)))
@@ -66,15 +66,15 @@ class ProcessData:
         # {symbol: {buy:{time, price}, }}}
         return
 
-    def check_trade(self, symbol, data):
+    def check_trade(self, tick_data, symbol):
         if symbol not in self.transactions.records:
             return
         
         order_book = self.api_client.get_order_book(symbol)
         bids = [float(k[0]) for k in order_book["bids"]]
-        self.transactions.check_trade_was_profitable(symbol, data, ( min(bids),  max(bids)))
+        self.transactions.check_trade_was_profitable(tick_data, symbol, ( min(bids),  max(bids)))
         
-    def save_data_in_memory(self, data, symbol):
+    def save_data_in_memory(self, tick_data, symbol):
         # add new data
         if symbol not in self.full_klines_data:
             # logger.debug(f"{symbol} - create new data frame for storage")
@@ -85,5 +85,5 @@ class ProcessData:
             # logger.debug(f"{symbol} - trimming data down to {self.run_config['max_kline_storage_count']}")
             self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.run_config["max_kline_storage_count"])
 
-        self.full_klines_data[symbol] = self.full_klines_data[symbol].append(data, ignore_index=True)
+        self.full_klines_data[symbol] = self.full_klines_data[symbol].append(tick_data, ignore_index=True)
         self.add_ta_analysis(symbol)

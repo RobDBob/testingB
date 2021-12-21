@@ -10,9 +10,9 @@ class AnomalyChecker:
             return round((tick_data/average_data)*100, 4)
         return 0
         
-    def check_activity_increased(self, symbol, symbol_kline_data, symbol_tick_data):
-        volSMAValue_last_avg_value = round(float(symbol_kline_data.tail(1)["volSMA"].values[0]), 4)
-        number_of_trades_last_avg_value = round(float(symbol_kline_data.tail(1)["NOTSMA"].values[0]), 4)
+    def check_activity_increased(self, historic_tick_data, symbol_tick_data, symbol):
+        volSMAValue_last_avg_value = round(float(historic_tick_data.tail(1)["volSMA"].values[0]), 4)
+        number_of_trades_last_avg_value = round(float(historic_tick_data.tail(1)["NOTSMA"].values[0]), 4)
         
         volume_increased = volSMAValue_last_avg_value * self.run_config["vol_increase_x"] < symbol_tick_data["volume"]
         number_of_trades_increased = number_of_trades_last_avg_value * self.run_config["not_increase_x"] < symbol_tick_data["numberOfTrades"]
