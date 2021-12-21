@@ -13,7 +13,7 @@ class TransactionManager:
     def records(self):
         return self._records
     
-    def check_trade_was_profitable(self, symbol, tick_data, bids):
+    def check_trade_was_profitable(self, tick_data, symbol, bids):
         # what time lapse we are interested in
         # what percentage increase we are interested in
         # the moment it increases by 5% - sell
@@ -25,13 +25,13 @@ class TransactionManager:
         
         purchase_time = recorded_tick["eventTime"]
         
-        tick_prices =     f'Want S: H:{tick_data["high"]}, L:{tick_data["low"]}, O:{tick_data["open"]}, C:{tick_data["close"]}'
-        pruchase_prices = f'Bought: H:{recorded_tick["high"]}, L:{recorded_tick["low"]}, O:{recorded_tick["open"]}, C:{recorded_tick["close"]}'
+        tick_prices_str =     f'Want S: H:{tick_data["high"]}, L:{tick_data["low"]}, O:{tick_data["open"]}, C:{tick_data["close"]}'
+        pruchase_prices_str = f'Bought: H:{recorded_tick["high"]}, L:{recorded_tick["low"]}, O:{recorded_tick["open"]}, C:{recorded_tick["close"]}'
 
         # after 10min - emergency sell?
         emergency_sell_time = 10 * 60
         if purchase_time + emergency_sell_time < tick_event_time :
-            logger.info(f"{symbol}: ============ : OUT OF TIME sell \n {pruchase_prices} \n {tick_prices}")
+            logger.info(f"{symbol}: ============ : OUT OF TIME sell \n {pruchase_prices_str} \n {tick_prices_str}")
             logger.info(f"{symbol}: asks: {self.records[symbol]['asks']}")
             logger.info(f"{symbol}: bids: {bids}\n")
 
