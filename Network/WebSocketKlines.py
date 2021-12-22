@@ -11,7 +11,7 @@ def start_web_socket(processData:ProcessData):
     """
     listen to websocket, populate postgresql with result
     """
-    coin_pairs = processData.api_client.get_usdt_symbols()
+    coin_pairs = processData.api_client.get_symbols(stable_coin="BUSD")
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     

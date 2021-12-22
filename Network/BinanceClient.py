@@ -43,12 +43,13 @@ class BinanceClient:
         df["timeStamp"] = (df.timeStamp/1000).astype("int64")
         return df
 
-    def get_usdt_symbols(self):
+    def get_symbols(self, stable_coin):
+        stable_coin = stable_coin.upper()
         exchange_info = self.get_exchange_info()
         all_symbols = exchange_info["symbols"]
-        usdt_symbols = [k["symbol"] for k in exchange_info["symbols"] if "USDT" in k["symbol"] and not ("DOWNUSDT" in k["symbol"] or "UPUSDT" in k["symbol"] )]
-        logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(usdt_symbols)} usdt symbols")
-        return usdt_symbols
+        symbol_pairs = [k["symbol"] for k in exchange_info["symbols"] if stable_coin in k["symbol"] and not (f"DOWN{stable_coin}" in k["symbol"] or f"UP{stable_coin}" in k["symbol"] )]
+        logger.info(f"retrieved {len(all_symbols)} all symbols, and {len(symbol_pairs)} {stable_coin} symbols")
+        return symbol_pairs
 
     def get_order_book(self, symbol, limit=50):
         url = f"{self.config['url']}/v3/depth?symbol={symbol}&limit={limit}"
