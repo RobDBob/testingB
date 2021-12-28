@@ -31,7 +31,7 @@ class AnomalyChecker:
     
     
     def anomaly_already_detected_for_symbol(self, symbol, event_time):
-        # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_eventTime[symbol] + self.back_off_after_notification}")
+        # logger.info(f"{get_datetime_single(time_stamp)}: anomally previously detected {symbol} - we are on the pause until after {self.anomaly_detected_eventTime[symbol] + self.back_off_after_notification_secs}")
         if symbol in self.anomaly_detected_eventTime:
-            return self.anomaly_detected_eventTime[symbol] + self.run_config["back_off_after_notification"] > event_time
+            return self.anomaly_detected_eventTime[symbol] + self.run_config["back_off_after_notification_secs"] > event_time
         return False

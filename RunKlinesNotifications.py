@@ -12,10 +12,12 @@ if __name__ == "__main__":
     run_config ={
         "vol_increase_x": 15,
         "not_increase_x": 15,
-        "back_off_after_notification": 3600,
-        "max_kline_storage_count": 360,
+        "back_off_after_notification_secs": 3600,
+        "max_minute_kline_memory_storage_count": 360,
         "ta_average_length": 60
     }
+
+    stable_coin = "usdt"
 
 
     logger.add("LOG_run_klines_notifications.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
@@ -23,4 +25,4 @@ if __name__ == "__main__":
     b_client = BinanceClient(testNet)
     # b_client = AsyncClient(testNet)
     processData = ProcessData(b_client, run_config)
-    start_web_socket(processData)
+    start_web_socket(stable_coin, processData)

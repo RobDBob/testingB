@@ -9,7 +9,8 @@ from BlackBoxScripts.AnomalyChecker import AnomalyChecker
 from Helpers.DBProgresSaver import DBProgresSaver
 
 class ProcessData:
-    def __init__(self, api_client: BinanceClient, run_config:dict):
+    def __init__(self, stable_coin: str, api_client: BinanceClient, run_config:dict):
+        self.stable_coin = stable_coin
         self.run_config = run_config
         self.api_client = api_client
         self.full_klines_data = {}
@@ -75,15 +76,15 @@ class ProcessData:
         self.transactions.check_trade_was_profitable(tick_data, symbol, ( min(bids),  max(bids)))
         
     def save_data_in_memory(self, tick_data, symbol):
-        # add new data
-        if symbol not in self.full_klines_data:
+        # add new data, only if with expected stable coin mix
+        if self.stable_coin in symbol and symbol not in self.full_klines_data:
             # logger.debug(f"{symbol} - create new data frame for storage")
             self.full_klines_data[symbol] = self.api_client.get_historical_klines(symbol, limit=self.run_config["ta_average_length"])
 
         # get rid of old data
-        if len(self.full_klines_data[symbol]) > ( self.run_config["max_kline_storage_count"] * 1.5) :
-            # logger.debug(f"{symbol} - trimming data down to {self.run_config['max_kline_storage_count']}")
-            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.run_config["max_kline_storage_count"])
+        if len(self.full_klines_data[symbol]) > ( self.run_config["max_minute_kline_memory_storage_count"] * 1.5) :
+            # logger.debug(f"{symbol} - trimming data down to {self.run_config['max_minute_kline_memory_storage_count']}")
+            self.full_klines_data[symbol] = self.full_klines_data[symbol].tail(self.run_config["max_minute_kline_memory_storage_count"])
 
         self.full_klines_data[symbol] = self.full_klines_data[symbol].append(tick_data, ignore_index=True)
         self.add_ta_analysis(symbol)

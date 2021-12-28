@@ -7,11 +7,11 @@ from Network.BinanceClient import BinanceClient
 # from binanceHelper.SamBinanceClient import AsyncClient
 
 @logger.catch
-def start_web_socket(processData:ProcessData):
+def start_web_socket(stable_coin: str, processData:ProcessData):
     """
     listen to websocket, populate postgresql with result
     """
-    coin_pairs = processData.api_client.get_symbols(stable_coin="BUSD")
+    coin_pairs = processData.api_client.get_symbols(stable_coin=stable_coin)
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
     websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
     
@@ -20,7 +20,7 @@ def start_web_socket(processData:ProcessData):
         time_stamp = int(time.time())
         if (time_stamp%900 == 0 and previous_time_stamp < time_stamp):
             # health check
-            logger.info(f"\nHEALTH CHECK --- Stored coin number: {len(processData.full_klines_data)}, (BTCUSDT): {len(processData.full_klines_data.get('BTCUSDT', []))}\n")
+            logger.info(f"\nHEALTH CHECK --- Stored coin number: {len(processData.full_klines_data)}, (BTC{stable_coin}): {len(processData.full_klines_data.get(f'BTC{stable_coin}', []))}\n")
             previous_time_stamp = time_stamp
 
         if websocket_manager.is_manager_stopping():
