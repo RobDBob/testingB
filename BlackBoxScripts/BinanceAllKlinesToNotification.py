@@ -35,6 +35,9 @@ class ProcessData:
         """
         is_kline_complete = incoming_message["data"]["k"]["x"]
         symbol = incoming_message["data"]["s"]
+
+        if self.stable_coin.lower() not in symbol.lower():
+            return
         
         tick_data = {
             "high": round(float(incoming_message["data"]["k"]["h"]), 4), 
@@ -77,7 +80,7 @@ class ProcessData:
         
     def save_data_in_memory(self, tick_data, symbol):
         # add new data, only if with expected stable coin mix
-        if self.stable_coin in symbol and symbol not in self.full_klines_data:
+        if self.stable_coin.lower() in symbol.lower() and symbol not in self.full_klines_data:
             # logger.debug(f"{symbol} - create new data frame for storage")
             self.full_klines_data[symbol] = self.api_client.get_historical_klines(symbol, limit=self.run_config["ta_average_length"])
 
