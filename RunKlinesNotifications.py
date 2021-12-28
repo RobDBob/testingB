@@ -9,7 +9,7 @@ from Network.BinanceClient import BinanceClient
 if __name__ == "__main__":
     # https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams
     
-    run_config ={
+    run_config = {
         "vol_increase_x": 15,
         "not_increase_x": 15,
         "back_off_after_notification_secs": 3600,
@@ -24,5 +24,5 @@ if __name__ == "__main__":
     testNet = False
     b_client = BinanceClient(testNet)
     # b_client = AsyncClient(testNet)
-    processData = ProcessData(b_client, run_config)
+    processData = ProcessData(stable_coin, b_client, run_config)
     start_web_socket(stable_coin, processData)
