@@ -38,11 +38,11 @@ class TransactionManager:
             del(self.records[symbol])
 
         # stop loss, after 2min
-        stop_loss_time = 2 * 60
-        percentage_loss = 0.95
-        if (purchase_time + stop_loss_time < tick_event_time) and ( tick_close_price < purchase_price * percentage_loss):
-            logger.info(f"{symbol}: STOP LOSS sell")
-            del(self.records[symbol])
+        # stop_loss_time = 2 * 60
+        # percentage_loss = 0.95
+        # if (purchase_time + stop_loss_time < tick_event_time) and ( tick_close_price < purchase_price * percentage_loss):
+        #     logger.info(f"{symbol}: STOP LOSS sell")
+        #     del(self.records[symbol])
 
         # # stop loss, after 2min
         # stop_loss_time = 2 * 60
