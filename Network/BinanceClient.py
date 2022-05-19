@@ -19,7 +19,7 @@ class BinanceClient:
             raise
         return res.json()
 
-    def get_historical_klines(self, symbol, startTime=None, endTime=None, limit=500, interval="1m"):
+    def get_historical_klines(self, symbol, startTime=None, endTime=None, limit=500, interval="1m", columns_to_drop=None):
         params = {"symbol": symbol, "interval": interval, "limit": limit} 
         if startTime:
             params["startTime"] = startTime
@@ -30,7 +30,10 @@ class BinanceClient:
 
         df = pd.DataFrame().from_records(res.json())
         df.columns = const.KLINE_COLUMNS
-        df = df.drop(const.KLINE_COLUMN_TO_DROP, axis=1)
+
+        if columns_to_drop:
+            df = df.drop(columns_to_drop, axis=1)
+            # df = df.drop(const.KLINE_COLUMN_TO_DROP, axis=1)
 
         # # as timestamp is returned in ms, let us convert this back to proper timestamps.
         # df.set_index('timeStamp', drop=False, inplace=True)

@@ -1,3 +1,4 @@
+
 from Network.WebSocketKlines import start_web_socket
 from loguru import logger
 from BlackBoxScripts.Processor_BinanceAllKlinesToNotification import Processor_BinanceAllKlinesToNotification
@@ -9,23 +10,11 @@ from Network.BinanceClient import BinanceClient
 
 if __name__ == "__main__":
     # https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams
-    
-    run_config = {
-        "vol_increase_x": 15,
-        "not_increase_x": 15,
-        "back_off_after_notification_secs": 3600,
-        "max_minute_kline_memory_storage_count": 360,
-        "ta_average_length": 60
-    }
-
-    stable_coin = "usdt"
-
 
     logger.add("LOG_run_klines_notifications.log", format="{time:YYYY-MM-DDTHH:mm:ss} {level} {message}", level="INFO",  rotation="500 MB")
     testNet = False
+    start_time_seconds = 163838534 # 21/12/01
+    start_time_seconds = 1646161341 # 22/03/01
     b_client = BinanceClient(testNet)
-    # processData = Processor_BinanceAllKlinesToNotification(stable_coin, b_client, run_config)
-    processData = Processor_BinanceAllKlinesDisplay(stable_coin)
-
-
-    start_web_socket(stable_coin, processData)
+    data = b_client.get_historical_klines("PORTOUSDT", startTime=start_time_seconds, interval="4h")
+    print(data)

@@ -2,18 +2,20 @@ import traceback
 import time
 from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import BinanceWebSocketApiManager
 from loguru import logger
-from BlackBoxScripts.BinanceAllKlinesToNotification import ProcessData
+from BlackBoxScripts.Processor_BinanceAllKlinesToNotification import Processor_BinanceAllKlinesToNotification
 from Network.BinanceClient import BinanceClient
 # from binanceHelper.SamBinanceClient import AsyncClient
 
 @logger.catch
-def start_web_socket(stable_coin: str, processData:ProcessData):
+def start_web_socket(stable_coin: str, processData:Processor_BinanceAllKlinesToNotification):
     """
     listen to websocket, populate postgresql with result
     """
+    channel_to_stream = 'kline_1m'
     coin_pairs = processData.api_client.get_symbols(stable_coin=stable_coin)
     websocket_manager = BinanceWebSocketApiManager(exchange="binance.com", output_default="dict")
-    websocket_manager.create_stream('kline_1m', coin_pairs, stream_label="dict", output="dict")
+
+    websocket_manager.create_stream(channel_to_stream, coin_pairs, stream_label="dict", output="dict")
     
     previous_time_stamp = 0
     while True:

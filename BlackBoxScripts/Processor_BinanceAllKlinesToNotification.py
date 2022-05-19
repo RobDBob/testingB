@@ -1,6 +1,3 @@
-
-import pandas as pd
-from loguru import logger
 import pandas_ta as ta
 
 from Network.BinanceClient import BinanceClient
@@ -8,7 +5,7 @@ from BlackBoxScripts.TransactionManager import TransactionManager
 from BlackBoxScripts.AnomalyChecker import AnomalyChecker
 from Helpers.DBProgresSaver import DBProgresSaver
 
-class ProcessData:
+class Processor_BinanceAllKlinesToNotification:
     def __init__(self, stable_coin: str, api_client: BinanceClient, run_config:dict):
         self.stable_coin = stable_coin
         self.run_config = run_config
